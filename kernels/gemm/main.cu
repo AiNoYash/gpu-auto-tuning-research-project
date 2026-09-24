@@ -1,15 +1,19 @@
 #include <iostream>
 #include <cstdlib>
 #include <cuda_runtime.h>
+#include <vector>
+#include <random>
+#include <algorithm>
+#include <cmath>
 
 // ---------------------------------------------------------
 // Tuning Parameters (Injected by Python via nvcc -D)
 // Fallback defaults are provided for standalone compilation
 // ---------------------------------------------------------
-// Helper macros to force expansion inside pragmas
-#define PRAGMA(x) _Pragma(#x)
-#define UNROLL_HELPER(x) PRAGMA(unroll x)
-#define UNROLL(x) UNROLL_HELPER(x)
+// ! We are not having loop unrolling anymore
+// #define PRAGMA(x) _Pragma(#x)
+// #define UNROLL_HELPER(x) PRAGMA(unroll x)
+// #define UNROLL(x) UNROLL_HELPER(x)
 
 #ifndef TILE_M
 #define TILE_M 64
@@ -31,25 +35,40 @@
 #define THREAD_Z 1
 #endif
 
-#ifndef UNROLL_FACTOR
-#define UNROLL_FACTOR 4
+#ifndef MAX_THREADS_PER_BLOCK
+#define MAX_THREADS_PER_BLOCK 1024
 #endif
+
+#ifndef MAX_STATIC_SHARED_MEMORY_PER_BLOCK
+#define MAX_STATIC_SHARED_MEMORY_PER_BLOCK 49152
+#endif
+
+#ifndef L2_CACHE_SIZE
+#define L2_CACHE_SIZE 4194304 // inbytes
+#endif
+
+// Relative variance threshold: (Variance / Mean^2)
+// Default threshold 0.0025 corresponds to a ~5% relative standard deviation.
+#ifndef VARIANCE_THRESHOLD
+#define VARIANCE_THRESHOLD 0.0025
+#endif
+
+// #ifndef UNROLL_FACTOR
+// #define UNROLL_FACTOR 4
+// #endif
 
 // ---------------------------------------------------------
 // CUTLASS-Inspired Block-Tiled GEMM Kernel
 // C = A * B
 // ---------------------------------------------------------
-__global__ void gemm_autotune_kernel(int M, int N, int K, const float *A, const float *B, float *C)
+__global__ void gemm_kernel(int M, int N, int K, const float *A, const float *B, float *C)
 {
-    // Determine the work footprint for each individual thread
-    const int WORK_M = TILE_M / THREAD_Y;
-    const int WORK_N = TILE_N / THREAD_X;
+    const int WORK_M = (TILE_M + THREAD_Y - 1) / THREAD_Y;
+    const int WORK_N = (TILE_N + THREAD_X - 1) / THREAD_X;
 
-    // Allocate shared memory for the thread block tile
     __shared__ float As[TILE_M][TILE_K];
     __shared__ float Bs[TILE_K][TILE_N];
 
-    // Thread-local accumulation registers
     float accum[WORK_M][WORK_N] = {0.0f};
 
     int bx = blockIdx.x;
@@ -59,12 +78,8 @@ __global__ void gemm_autotune_kernel(int M, int N, int K, const float *A, const 
     int tid = ty * blockDim.x + tx;
     int num_threads = blockDim.x * blockDim.y;
 
-    // Loop over the K-dimension in steps of TILE_K
     for (int k_step = 0; k_step < K; k_step += TILE_K)
     {
-
-        // 1. Collaborative loading of A and B tiles into shared memory
-        // A 1D flattened loop ensures efficient loading regardless of thread shape
         for (int i = tid; i < TILE_M * TILE_K; i += num_threads)
         {
             int row = i / TILE_K;
@@ -84,43 +99,114 @@ __global__ void gemm_autotune_kernel(int M, int N, int K, const float *A, const 
         }
         __syncthreads();
 
-        // 2. Thread-level matrix multiplication on the tile
-        UNROLL(UNROLL_FACTOR)
+        // UNROLL(UNROLL_FACTOR)
         for (int k = 0; k < TILE_K; ++k)
         {
             for (int wm = 0; wm < WORK_M; ++wm)
             {
                 for (int wn = 0; wn < WORK_N; ++wn)
                 {
-                    accum[wm][wn] += As[ty * WORK_M + wm][k] * Bs[k][tx * WORK_N + wn];
+                    int tile_row = ty * WORK_M + wm;
+                    int tile_col = tx * WORK_N + wn;
+
+                    if (tile_row < TILE_M && tile_col < TILE_N)
+                    {
+                        accum[wm][wn] += As[tile_row][k] * Bs[k][tile_col];
+                    }
                 }
             }
         }
         __syncthreads();
     }
 
-    // 3. Write thread-local accumulated results back to global memory
     for (int wm = 0; wm < WORK_M; ++wm)
     {
         for (int wn = 0; wn < WORK_N; ++wn)
         {
-            int global_row = by * TILE_M + ty * WORK_M + wm;
-            int global_col = bx * TILE_N + tx * WORK_N + wn;
-            if (global_row < M && global_col < N)
+            int tile_row = ty * WORK_M + wm;
+            int tile_col = tx * WORK_N + wn;
+
+            // Ensure we don't attempt to map an out-of-bounds tile index
+            // back to a global memory coordinate.
+            if (tile_row < TILE_M && tile_col < TILE_N)
             {
-                C[global_row * N + global_col] = accum[wm][wn];
+                int global_row = by * TILE_M + tile_row;
+                int global_col = bx * TILE_N + tile_col;
+                if (global_row < M && global_col < N)
+                {
+                    C[global_row * N + global_col] = accum[wm][wn];
+                }
             }
         }
     }
 }
 
-// ---------------------------------------------------------
-// Host Code: Setup, Launch, and Timing
-// ---------------------------------------------------------
+void init_random_matrix(float *d_ptr, size_t num_elements, float min_val = -1.0f, float max_val = 1.0f)
+{
+    std::vector<float> h_data(num_elements);
+
+    std::mt19937 gen(42);
+    std::uniform_real_distribution<float> dist(min_val, max_val);
+
+    for (size_t i = 0; i < num_elements; ++i)
+    {
+        h_data[i] = dist(gen);
+    }
+
+    cudaMemcpy(d_ptr, h_data.data(), num_elements * sizeof(float), cudaMemcpyHostToDevice);
+}
+
+// Compute variance and mean of measured runtimes
+double compute_variance(const std::vector<float> &data, double &mean_out)
+{
+    if (data.empty())
+        return 0.0;
+
+    double sum = 0.0;
+    for (float val : data)
+        sum += val;
+    mean_out = sum / data.size();
+
+    double sq_diff_sum = 0.0;
+    for (float val : data)
+    {
+        double diff = val - mean_out;
+        sq_diff_sum += diff * diff;
+    }
+    return sq_diff_sum / data.size();
+}
+
+// Compute median time from vector
+float compute_median(std::vector<float> data)
+{
+    std::sort(data.begin(), data.end());
+    size_t n = data.size();
+    if (n % 2 == 0)
+    {
+        return (data[n / 2 - 1] + data[n / 2]) / 2.0f;
+    }
+    else
+    {
+        return data[n / 2];
+    }
+}
+
 int main(int argc, char **argv)
 {
-    // Accept Matrix Shape (M, N, K) dynamically via command line arguments
-    // so we don't have to recompile just to test different matrix sizes.
+    int threads_per_block = THREAD_X * THREAD_Y * THREAD_Z;
+    if (threads_per_block > MAX_THREADS_PER_BLOCK || threads_per_block <= 0)
+    {
+        std::cout << -1 << std::endl;
+        return 0;
+    }
+
+    size_t shared_mem_bytes = (TILE_M * TILE_K + TILE_K * TILE_N) * sizeof(float);
+    if (shared_mem_bytes > MAX_STATIC_SHARED_MEMORY_PER_BLOCK)
+    {
+        std::cout << -1 << std::endl;
+        return 0;
+    }
+
     int M = (argc > 1) ? std::atoi(argv[1]) : 1024;
     int N = (argc > 2) ? std::atoi(argv[2]) : 1024;
     int K = (argc > 3) ? std::atoi(argv[3]) : 1024;
@@ -130,45 +216,114 @@ int main(int argc, char **argv)
     size_t bytes_C = M * N * sizeof(float);
 
     float *d_A, *d_B, *d_C;
-    cudaMalloc(&d_A, bytes_A);
-    cudaMalloc(&d_B, bytes_B);
-    cudaMalloc(&d_C, bytes_C);
 
-    // Initialize with dummy data (omitted for brevity)
-    cudaMemset(d_A, 1, bytes_A);
-    cudaMemset(d_B, 1, bytes_B);
+    if (cudaMalloc(&d_A, bytes_A) != cudaSuccess ||
+        cudaMalloc(&d_B, bytes_B) != cudaSuccess ||
+        cudaMalloc(&d_C, bytes_C) != cudaSuccess)
+    {
+        std::cout << -1 << std::endl;
+        return 0;
+    }
+
+    float *d_flush = nullptr;
+    if (L2_CACHE_SIZE > 0)
+    {
+        if (cudaMalloc(&d_flush, L2_CACHE_SIZE) != cudaSuccess)
+        {
+            std::cout << -1 << std::endl;
+            cudaFree(d_A);
+            cudaFree(d_B);
+            cudaFree(d_C);
+            return 0;
+        }
+    }
+
+    init_random_matrix(d_A, M * K, -0.5f, 0.5f);
+    init_random_matrix(d_B, K * N, -0.5f, 0.5f);
     cudaMemset(d_C, 0, bytes_C);
 
-    // Setup Grid and Block dimensions based on injected macros
     dim3 threads(THREAD_X, THREAD_Y, THREAD_Z);
     dim3 blocks((N + TILE_N - 1) / TILE_N, (M + TILE_M - 1) / TILE_M);
 
-    // Timing events
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    // Warmup
-    gemm_autotune_kernel<<<blocks, threads>>>(M, N, K, d_A, d_B, d_C);
-    cudaDeviceSynchronize();
-
-    // Profile
-    cudaEventRecord(start);
-    int iterations = 10;
-    for (int i = 0; i < iterations; ++i)
+    // 1. Warmup (5 times)
+    for (int i = 0; i < 10; ++i)
     {
-        gemm_autotune_kernel<<<blocks, threads>>>(M, N, K, d_A, d_B, d_C);
+        gemm_kernel<<<blocks, threads>>>(M, N, K, d_A, d_B, d_C);
     }
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
 
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    float avg_ms = milliseconds / iterations;
+    // Check if the kernel launch itself failed (e.g., register limits exceeded)
+    if (cudaGetLastError() != cudaSuccess)
+    {
+        cudaFree(d_A);
+        cudaFree(d_B);
+        cudaFree(d_C);
+        cudaFree(d_flush);
+        std::cout << -1 << std::endl;
+        return 0;
+    }
 
-    // Output solely the time so Python can parse it easily
-    std::cout << avg_ms << std::endl;
+    // Check if the kernel crashed during execution (e.g., out of bounds memory access)
+    if (cudaDeviceSynchronize() != cudaSuccess)
+    {
+        cudaFree(d_A);
+        cudaFree(d_B);
+        cudaFree(d_C);
+        cudaFree(d_flush);
+        std::cout << -1 << std::endl;
+        return 0;
+    }
 
+    // 2. Adaptive Benchmarking Logic (up to 3 batches of 20 runs = max 60)
+    std::vector<float> run_times;
+    run_times.reserve(60);
+
+    const int BATCH_SIZE = 20;
+    const int MAX_BATCHES = 3;
+
+    for (int batch = 0; batch < MAX_BATCHES; ++batch)
+    {
+        // Run 20 individual executions and time each
+        for (int i = 0; i < BATCH_SIZE; ++i)
+        {
+
+            if (L2_CACHE_SIZE > 0)
+            {
+                cudaMemset(d_flush, 0, L2_CACHE_SIZE);
+            }
+
+            cudaEventRecord(start);
+            gemm_kernel<<<blocks, threads>>>(M, N, K, d_A, d_B, d_C);
+            cudaEventRecord(stop);
+            cudaEventSynchronize(stop);
+
+            float ms = 0.0f;
+            cudaEventElapsedTime(&ms, start, stop);
+            run_times.push_back(ms);
+        }
+
+        // Calculate variance across all runs collected so far
+        double mean = 0.0;
+        double variance = compute_variance(run_times, mean);
+
+        // Normalize variance relative to mean runtime (Variance / Mean^2)
+        // so the threshold works across all matrix sizes.
+        double rel_variance = (mean > 0.0) ? (variance / (mean * mean)) : 0.0;
+
+        // If variance is within acceptable threshold, stop early
+        if (rel_variance < VARIANCE_THRESHOLD)
+        {
+            break;
+        }
+    }
+
+    std::cout << compute_median(run_times) << std::endl;
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);

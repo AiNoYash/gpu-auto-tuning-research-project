@@ -15,8 +15,7 @@ param_space = {
     "TILE_K": [8, 16, 32],
     "THREAD_X": [8, 16, 32],
     "THREAD_Y": [4, 8, 16],
-    "THREAD_Z": [1], # Z is typically 1 for 2D tiling
-    "UNROLL": [1, 2, 4, 8]
+    "THREAD_Z": [1],
 }
 
 def generate_discrete_lhs(space, num_samples):
