@@ -10,10 +10,9 @@
 // Tuning Parameters (Injected by Python via nvcc -D)
 // Fallback defaults are provided for standalone compilation
 // ---------------------------------------------------------
-// ! We are not having loop unrolling anymore
-// #define PRAGMA(x) _Pragma(#x)
-// #define UNROLL_HELPER(x) PRAGMA(unroll x)
-// #define UNROLL(x) UNROLL_HELPER(x)
+#define PRAGMA(x) _Pragma(#x)
+#define UNROLL_HELPER(x) PRAGMA(unroll x)
+#define UNROLL(x) UNROLL_HELPER(x)
 
 #ifndef TILE_M
 #define TILE_M 64
@@ -44,7 +43,7 @@
 #endif
 
 #ifndef L2_CACHE_SIZE
-#define L2_CACHE_SIZE 4194304 // inbytes
+#define L2_CACHE_SIZE 4194304 // in bytes
 #endif
 
 // Relative variance threshold: (Variance / Mean^2)
@@ -53,9 +52,9 @@
 #define VARIANCE_THRESHOLD 0.0025
 #endif
 
-// #ifndef UNROLL_FACTOR
-// #define UNROLL_FACTOR 4
-// #endif
+#ifndef UNROLL_FACTOR
+#define UNROLL_FACTOR 4
+#endif
 
 // ---------------------------------------------------------
 // CUTLASS-Inspired Block-Tiled GEMM Kernel
@@ -99,7 +98,7 @@ __global__ void gemm_kernel(int M, int N, int K, const float *A, const float *B,
         }
         __syncthreads();
 
-        // UNROLL(UNROLL_FACTOR)
+        UNROLL(UNROLL_FACTOR)
         for (int k = 0; k < TILE_K; ++k)
         {
             for (int wm = 0; wm < WORK_M; ++wm)
@@ -196,14 +195,14 @@ int main(int argc, char **argv)
     int threads_per_block = THREAD_X * THREAD_Y * THREAD_Z;
     if (threads_per_block > MAX_THREADS_PER_BLOCK || threads_per_block <= 0)
     {
-        std::cout << -1 << std::endl;
+        std::cout << "{\"status\": \"invalid_config\", \"error_message\": \"Thread count per block exceeds max limit\"}" << std::endl;
         return 0;
     }
 
     size_t shared_mem_bytes = (TILE_M * TILE_K + TILE_K * TILE_N) * sizeof(float);
     if (shared_mem_bytes > MAX_STATIC_SHARED_MEMORY_PER_BLOCK)
     {
-        std::cout << -1 << std::endl;
+        std::cout << "{\"status\": \"invalid_config\", \"error_message\": \"Static shared memory request exceeds max limit\"}" << std::endl;
         return 0;
     }
 
@@ -215,25 +214,35 @@ int main(int argc, char **argv)
     size_t bytes_B = K * N * sizeof(float);
     size_t bytes_C = M * N * sizeof(float);
 
-    float *d_A, *d_B, *d_C;
+    float *d_A = nullptr, *d_B = nullptr, *d_C = nullptr;
 
-    if (cudaMalloc(&d_A, bytes_A) != cudaSuccess ||
-        cudaMalloc(&d_B, bytes_B) != cudaSuccess ||
-        cudaMalloc(&d_C, bytes_C) != cudaSuccess)
+    cudaError_t err_a = cudaMalloc(&d_A, bytes_A);
+    cudaError_t err_b = cudaMalloc(&d_B, bytes_B);
+    cudaError_t err_c = cudaMalloc(&d_C, bytes_C);
+
+    if (err_a != cudaSuccess || err_b != cudaSuccess || err_c != cudaSuccess)
     {
-        std::cout << -1 << std::endl;
+        if (d_A)
+            cudaFree(d_A);
+        if (d_B)
+            cudaFree(d_B);
+        if (d_C)
+            cudaFree(d_C);
+        std::cout << "{\"status\": \"cuda_oom\", \"error_message\": \"Memory allocation failed for matrices\"}" << std::endl;
         return 0;
     }
 
     float *d_flush = nullptr;
     if (L2_CACHE_SIZE > 0)
     {
-        if (cudaMalloc(&d_flush, L2_CACHE_SIZE) != cudaSuccess)
+        cudaError_t err_flush = cudaMalloc(&d_flush, L2_CACHE_SIZE);
+        if (err_flush != cudaSuccess)
         {
-            std::cout << -1 << std::endl;
+
             cudaFree(d_A);
             cudaFree(d_B);
             cudaFree(d_C);
+            std::cout << "{\"status\": \"cuda_oom\", \"error_message\": \"Failed to allocate L2 cache flush buffer\"}" << std::endl;
             return 0;
         }
     }
@@ -249,31 +258,34 @@ int main(int argc, char **argv)
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    // 1. Warmup (5 times)
+    // 1. Warmup (10 times)
     for (int i = 0; i < 10; ++i)
     {
         gemm_kernel<<<blocks, threads>>>(M, N, K, d_A, d_B, d_C);
     }
 
-    // Check if the kernel launch itself failed (e.g., register limits exceeded)
-    if (cudaGetLastError() != cudaSuccess)
+    cudaError_t launch_err = cudaGetLastError();
+
+    if (launch_err != cudaSuccess)
     {
         cudaFree(d_A);
         cudaFree(d_B);
         cudaFree(d_C);
-        cudaFree(d_flush);
-        std::cout << -1 << std::endl;
+        if (d_flush)
+            cudaFree(d_flush);
+        std::cout << "{\"status\": \"launch_failure\", \"error_message\": \"Kernel launch failed\"}" << std::endl;
         return 0;
     }
 
-    // Check if the kernel crashed during execution (e.g., out of bounds memory access)
-    if (cudaDeviceSynchronize() != cudaSuccess)
+    cudaError_t sync_err = cudaDeviceSynchronize();
+    if (sync_err != cudaSuccess)
     {
         cudaFree(d_A);
         cudaFree(d_B);
         cudaFree(d_C);
-        cudaFree(d_flush);
-        std::cout << -1 << std::endl;
+        if (d_flush)
+            cudaFree(d_flush);
+        std::cout << "{\"status\": \"execution_failure\", \"error_message\": \"Kernel execution failed\"}" << std::endl;
         return 0;
     }
 
@@ -283,13 +295,14 @@ int main(int argc, char **argv)
 
     const int BATCH_SIZE = 20;
     const int MAX_BATCHES = 3;
+    double final_mean = 0.0;
+    double final_variance = 0.0;
+    double final_rel_variance = 0.0;
 
     for (int batch = 0; batch < MAX_BATCHES; ++batch)
     {
-        // Run 20 individual executions and time each
         for (int i = 0; i < BATCH_SIZE; ++i)
         {
-
             if (L2_CACHE_SIZE > 0)
             {
                 cudaMemset(d_flush, 0, L2_CACHE_SIZE);
@@ -305,27 +318,32 @@ int main(int argc, char **argv)
             run_times.push_back(ms);
         }
 
-        // Calculate variance across all runs collected so far
-        double mean = 0.0;
-        double variance = compute_variance(run_times, mean);
+        final_variance = compute_variance(run_times, final_mean);
+        final_rel_variance = (final_mean > 0.0) ? (final_variance / (final_mean * final_mean)) : 0.0;
 
-        // Normalize variance relative to mean runtime (Variance / Mean^2)
-        // so the threshold works across all matrix sizes.
-        double rel_variance = (mean > 0.0) ? (variance / (mean * mean)) : 0.0;
-
-        // If variance is within acceptable threshold, stop early
-        if (rel_variance < VARIANCE_THRESHOLD)
+        if (final_rel_variance < VARIANCE_THRESHOLD)
         {
             break;
         }
     }
 
-    std::cout << compute_median(run_times) << std::endl;
+    float median_time = compute_median(run_times);
 
+    // Output JSON string
+    std::cout << "{"
+              << "\"status\": \"success\", "
+              << "\"median_ms\": " << median_time << ", "
+              << "\"mean_ms\": " << final_mean << ", "
+              << "\"variance\": " << final_variance << ", "
+              << "\"rel_variance\": " << final_rel_variance << ", "
+              << "\"iterations\": " << run_times.size()
+              << "}" << std::endl;
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+    if (d_flush)
+        cudaFree(d_flush);
     return 0;
 }

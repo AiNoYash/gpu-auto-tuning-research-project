@@ -3,27 +3,27 @@ import random
 import math
 import os
 import csv
+import json
 
 # 1. Define discrete tuning space for Batched GEMM (BMM)
-# All parameters restricted to clean powers-of-2 for Phase 1
 param_space = {
-    "BATCH_SIZE": [8, 16, 32, 64],
-    "M": [64, 128, 256, 512, 1024],
-    "N": [64, 128, 256, 512, 1024],
-    "K": [64, 128, 256, 512],
-    "TILE_M": [16, 32, 64, 128],
-    "TILE_N": [16, 32, 64, 128],
-    "TILE_K": [8, 16, 32],
-    "THREAD_X": [8, 16, 32],
-    "THREAD_Y": [4, 8, 16],
-    "THREAD_Z": [1],
+    "BATCH_SIZE": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+    
+    "M": [16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 5120, 8192, 14336],
+    "N": [16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 5120, 8192, 14336],
+    "K": [16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 8192],
+    
+    "TILE_M": [4, 8, 16, 32, 64, 96, 128, 192, 256],
+    "TILE_N": [4, 8, 16, 32, 64, 96, 128, 192, 256],
+    "TILE_K": [2, 4, 8, 16, 32, 64],
+    
+    "THREAD_X": [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
+    "THREAD_Y": [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
+    "THREAD_Z": [1], 
+    "UNROLL_FACTOR": [1, 2, 4, 8, 16, 32, 64]
 }
 
 def generate_discrete_lhs(space, num_samples):
-    """
-    Generates a Latin Hypercube Sample for discrete categorical data.
-    Ensures every value in a parameter's list is sampled as evenly as possible.
-    """
     lhs_samples = {}
     for key, choices in space.items():
         repeats = math.ceil(num_samples / len(choices))
@@ -39,12 +39,15 @@ def generate_discrete_lhs(space, num_samples):
     return configurations
 
 def main():
-    # Number of samples to collect
-    num_samples = 50
+    num_samples = 500
     configurations = generate_discrete_lhs(param_space, num_samples)
 
     csv_filename = "bmm_tuning_dataset.csv"
-    fieldnames = list(param_space.keys()) + ["latency_ms"]
+
+    # Add the new JSON stats to the CSV headers
+    extra_fields = ["latency_ms", "status", "mean_ms", "variance", "rel_variance", "iterations"]
+    fieldnames = list(param_space.keys()) + extra_fields
+
     file_exists = os.path.isfile(csv_filename)
 
     print(f"Starting Batched GEMM (BMM) LHS Autotuning: {num_samples} configurations...")
@@ -59,47 +62,91 @@ def main():
         for idx, config in enumerate(configurations):
             print(f"\nEvaluating Config {idx+1}/{num_samples}: {config}")
             
-            # Inject compilation flags (compile-time tuning parameters)
             compile_cmd = [
                 "nvcc", "-O3", "main.cu", "-o", "bmm_autotune",
                 f"-DTILE_M={config['TILE_M']}", f"-DTILE_N={config['TILE_N']}", f"-DTILE_K={config['TILE_K']}",
-                f"-DTHREAD_X={config['THREAD_X']}", f"-DTHREAD_Y={config['THREAD_Y']}", f"-DTHREAD_Z={config['THREAD_Z']}"
+                f"-DTHREAD_X={config['THREAD_X']}", f"-DTHREAD_Y={config['THREAD_Y']}", f"-DTHREAD_Z={config['THREAD_Z']}",
+                f"-DUNROLL_FACTOR={config['UNROLL_FACTOR']}"
             ]
             
             try:
-                # Compile the CUDA C++ code
-                subprocess.run(compile_cmd, check=True, capture_output=True)
+                # Compile the C++ code
+                subprocess.run(compile_cmd, check=True, capture_output=True, text=True)
                 
                 # Pass M, N, K, and BATCH_SIZE at runtime
                 run_cmd = [
-                    "./bmm_autotune",
-                    str(config['M']),
-                    str(config['N']),
-                    str(config['K']),
+                    "./bmm_autotune", 
+                    str(config['M']), 
+                    str(config['N']), 
+                    str(config['K']), 
                     str(config['BATCH_SIZE'])
                 ]
-                result = subprocess.run(run_cmd, check=True, capture_output=True, text=True)
                 
-                exec_time_ms = float(result.stdout.strip())
+                try:
+                    result = subprocess.run(run_cmd, check=True, capture_output=True, text=True, timeout=100.0)
+                except subprocess.TimeoutExpired:
+                    print("-> Execution Timeout (Config took >100s). Recording as -1.0.")
+                    data_point = config.copy()
+                    data_point["latency_ms"] = -1.0
+                    data_point["status"] = "timeout"
+                    data_point["mean_ms"] = -1.0
+                    data_point["variance"] = -1.0
+                    data_point["rel_variance"] = -1.0
+                    data_point["iterations"] = 0
+                    writer.writerow(data_point)
+                    csvfile.flush()
+                    continue 
                 
-                if exec_time_ms < 0:
-                    print(f"-> Invalid Configuration: Exceeded hardware limits (threads/shared memory/launch failed). Skipped.")
+                # Parse the JSON execution output
+                try:
+                    output_data = json.loads(result.stdout.strip())
+                except json.JSONDecodeError:
+                    print(f"-> Failed Parsing JSON. Raw output: {result.stdout.strip()}")
                     continue
-
-                # Merge execution time into config dictionary and save
+                
                 data_point = config.copy()
-                data_point["latency_ms"] = exec_time_ms
+                
+                # Handle the JSON response and map it to CSV columns
+                if output_data.get("status") == "success":
+                    print(f"-> Success: {output_data['median_ms']:.4f} ms (Runs: {output_data['iterations']}, RelVar: {output_data['rel_variance']:.5f})")
+                    
+                    data_point["latency_ms"] = output_data["median_ms"]
+                    data_point["status"] = output_data["status"]
+                    data_point["mean_ms"] = output_data["mean_ms"]
+                    data_point["variance"] = output_data["variance"]
+                    data_point["rel_variance"] = output_data["rel_variance"]
+                    data_point["iterations"] = output_data["iterations"]
+                    
+                else:
+                    # Catches 'invalid_config', 'cuda_oom', etc.
+                    status = output_data.get("status", "unknown_error")
+                    error_msg = output_data.get("error_message", "Unknown error")
+                    print(f"-> Invalid Configuration ({status}): {error_msg}. Recording as -1.0.")
+                    
+                    data_point["latency_ms"] = -1.0
+                    data_point["status"] = status
+                    data_point["mean_ms"] = -1.0
+                    data_point["variance"] = -1.0
+                    data_point["rel_variance"] = -1.0
+                    data_point["iterations"] = 0
                 
                 writer.writerow(data_point)
                 csvfile.flush()
                 
-                print(f"-> Success: {exec_time_ms:.4f} ms")
-                
             except subprocess.CalledProcessError as e:
-                err_msg = e.stderr.decode('utf-8').strip() if e.stderr else str(e)
-                print(f"-> Failed Compilation/Execution. Error: {err_msg}")
-            except ValueError:
-                print(f"-> Failed Parsing Output. Raw output: {result.stdout.strip()}")
+                # Catches actual compilation errors from nvcc
+                print(f"-> Failed Compilation. Error: {e.stderr.strip()}")
+                
+                data_point = config.copy()
+                data_point["latency_ms"] = -1.0
+                data_point["status"] = "compilation_failed"
+                data_point["mean_ms"] = -1.0
+                data_point["variance"] = -1.0
+                data_point["rel_variance"] = -1.0
+                data_point["iterations"] = 0
+                
+                writer.writerow(data_point)
+                csvfile.flush()
 
 if __name__ == "__main__":
     main()

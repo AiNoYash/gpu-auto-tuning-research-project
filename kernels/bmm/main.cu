@@ -48,6 +48,14 @@
 #define VARIANCE_THRESHOLD 0.0025
 #endif
 
+#define PRAGMA(x) _Pragma(#x)
+#define UNROLL_HELPER(x) PRAGMA(unroll x)
+#define UNROLL(x) UNROLL_HELPER(x)
+
+#ifndef UNROLL_FACTOR
+#define UNROLL_FACTOR 4
+#endif
+
 // ---------------------------------------------------------
 // Batched Block-Tiled GEMM Kernel
 // For each batch b in [0, BATCH_SIZE - 1]:
@@ -57,12 +65,13 @@ __global__ void bmm_kernel(int BATCH_SIZE, int M, int N, int K,
                            const float *A, const float *B, float *C)
 {
     int batch_idx = blockIdx.z;
-    if (batch_idx >= BATCH_SIZE) return;
+    if (batch_idx >= BATCH_SIZE)
+        return;
 
     // Strided pointer arithmetic for the current batch matrix slice
     const float *A_batch = A + (size_t)batch_idx * M * K;
     const float *B_batch = B + (size_t)batch_idx * K * N;
-    float *C_batch       = C + (size_t)batch_idx * M * N;
+    float *C_batch = C + (size_t)batch_idx * M * N;
 
     const int WORK_M = (TILE_M + THREAD_Y - 1) / THREAD_Y;
     const int WORK_N = (TILE_N + THREAD_X - 1) / THREAD_X;
@@ -103,6 +112,7 @@ __global__ void bmm_kernel(int BATCH_SIZE, int M, int N, int K,
         __syncthreads();
 
         // Accumulate products over the current tile slice
+        UNROLL(UNROLL_FACTOR)
         for (int k = 0; k < TILE_K; ++k)
         {
             for (int wm = 0; wm < WORK_M; ++wm)
@@ -195,29 +205,36 @@ float compute_median(std::vector<float> data)
 
 int main(int argc, char **argv)
 {
+
     int threads_per_block = THREAD_X * THREAD_Y * THREAD_Z;
     if (threads_per_block > MAX_THREADS_PER_BLOCK || threads_per_block <= 0)
     {
-        std::cout << -1 << std::endl;
+        std::cout << "{\"status\": \"invalid_config\", \"error_message\": \"Thread count per block exceeds max limit\"}" << std::endl;
         return 0;
     }
 
     size_t shared_mem_bytes = (TILE_M * TILE_K + TILE_K * TILE_N) * sizeof(float);
     if (shared_mem_bytes > MAX_STATIC_SHARED_MEMORY_PER_BLOCK)
     {
-        std::cout << -1 << std::endl;
+        std::cout << "{\"status\": \"invalid_config\", \"error_message\": \"Static shared memory request exceeds max limit\"}" << std::endl;
         return 0;
     }
 
     // CLI input format: ./bmm_autotune <M> <N> <K> <BATCH_SIZE>
-    int M          = (argc > 1) ? std::atoi(argv[1]) : 512;
-    int N          = (argc > 2) ? std::atoi(argv[2]) : 512;
-    int K          = (argc > 3) ? std::atoi(argv[3]) : 512;
+    int M = (argc > 1) ? std::atoi(argv[1]) : 512;
+    int N = (argc > 2) ? std::atoi(argv[2]) : 512;
+    int K = (argc > 3) ? std::atoi(argv[3]) : 512;
     int BATCH_SIZE = (argc > 4) ? std::atoi(argv[4]) : 32;
 
     if (BATCH_SIZE <= 0 || M <= 0 || N <= 0 || K <= 0)
     {
-        std::cout << -1 << std::endl;
+        std::cout << "{\"status\": \"invalid_config\", \"error_message\": \"Invalid or zero matrix/batch dimensions\"}" << std::endl;
+        return 0;
+    }
+
+    if (BATCH_SIZE > 65535)
+    {
+        std::cout << "{\"status\": \"invalid_config\", \"error_message\": \"BATCH_SIZE exceeds maximum grid Z-dimension limit of 65535\"}" << std::endl;
         return 0;
     }
 
@@ -237,10 +254,13 @@ int main(int argc, char **argv)
         cudaMalloc(&d_B, bytes_B) != cudaSuccess ||
         cudaMalloc(&d_C, bytes_C) != cudaSuccess)
     {
-        if (d_A) cudaFree(d_A);
-        if (d_B) cudaFree(d_B);
-        if (d_C) cudaFree(d_C);
-        std::cout << -1 << std::endl;
+        if (d_A)
+            cudaFree(d_A);
+        if (d_B)
+            cudaFree(d_B);
+        if (d_C)
+            cudaFree(d_C);
+        std::cout << "{\"status\": \"cuda_oom\", \"error_message\": \"Memory allocation failed\"}" << std::endl;
         return 0;
     }
 
@@ -252,7 +272,7 @@ int main(int argc, char **argv)
             cudaFree(d_A);
             cudaFree(d_B);
             cudaFree(d_C);
-            std::cout << -1 << std::endl;
+            std::cout << "{\"status\": \"cuda_oom\", \"error_message\": \"Failed to allocate L2 cache flush buffer\"}" << std::endl;
             return 0;
         }
     }
@@ -263,8 +283,8 @@ int main(int argc, char **argv)
 
     dim3 threads(THREAD_X, THREAD_Y, THREAD_Z);
     // Grid: X covers N, Y covers M, Z covers BATCH_SIZE
-    dim3 blocks((N + TILE_N - 1) / TILE_N, 
-                (M + TILE_M - 1) / TILE_M, 
+    dim3 blocks((N + TILE_N - 1) / TILE_N,
+                (M + TILE_M - 1) / TILE_M,
                 BATCH_SIZE);
 
     cudaEvent_t start, stop;
@@ -283,10 +303,11 @@ int main(int argc, char **argv)
         cudaFree(d_A);
         cudaFree(d_B);
         cudaFree(d_C);
-        if (d_flush) cudaFree(d_flush);
+        if (d_flush)
+            cudaFree(d_flush);
         cudaEventDestroy(start);
         cudaEventDestroy(stop);
-        std::cout << -1 << std::endl;
+        std::cout << "{\"status\": \"launch_failure\", \"error_message\": \"Kernel launch or execution failed\"}" << std::endl;
         return 0;
     }
 
@@ -295,16 +316,17 @@ int main(int argc, char **argv)
     run_times.reserve(60);
 
     const int BATCH_RUN_SIZE = 20;
-    const int MAX_BATCHES    = 3;
+    const int MAX_BATCHES = 3;
+    double final_mean = 0.0;
+    double final_variance = 0.0;
+    double final_rel_variance = 0.0;
 
     for (int batch = 0; batch < MAX_BATCHES; ++batch)
     {
         for (int i = 0; i < BATCH_RUN_SIZE; ++i)
         {
             if (L2_CACHE_SIZE > 0)
-            {
                 cudaMemset(d_flush, 0, L2_CACHE_SIZE);
-            }
 
             cudaEventRecord(start);
             bmm_kernel<<<blocks, threads>>>(BATCH_SIZE, M, N, K, d_A, d_B, d_C);
@@ -316,23 +338,32 @@ int main(int argc, char **argv)
             run_times.push_back(ms);
         }
 
-        double mean = 0.0;
-        double variance = compute_variance(run_times, mean);
-        double rel_variance = (mean > 0.0) ? (variance / (mean * mean)) : 0.0;
+        final_variance = compute_variance(run_times, final_mean);
+        final_rel_variance = (final_mean > 0.0) ? (final_variance / (final_mean * final_mean)) : 0.0;
 
-        if (rel_variance < VARIANCE_THRESHOLD)
+        if (final_rel_variance < VARIANCE_THRESHOLD)
         {
             break;
         }
     }
 
-    std::cout << compute_median(run_times) << std::endl;
+    float median_time = compute_median(run_times);
+
+    std::cout << "{"
+              << "\"status\": \"success\", "
+              << "\"median_ms\": " << median_time << ", "
+              << "\"mean_ms\": " << final_mean << ", "
+              << "\"variance\": " << final_variance << ", "
+              << "\"rel_variance\": " << final_rel_variance << ", "
+              << "\"iterations\": " << run_times.size()
+              << "}" << std::endl;
 
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
-    if (d_flush) cudaFree(d_flush);
+    if (d_flush)
+        cudaFree(d_flush);
     return 0;
 }
