@@ -2,3 +2,7 @@
 <!-- Run Device Query -->
 cd deviceQuery/
 nvcc -Xcompiler -std=c++11 deviceQuery.cpp -I./Common -o deviceQuery
+
+
+<!-- Check for which arch the binary is compiled -->
+cuobjdump -sass ./gemm_autotune | grep arch

@@ -210,9 +210,9 @@ int main(int argc, char **argv)
     int N = (argc > 2) ? std::atoi(argv[2]) : 1024;
     int K = (argc > 3) ? std::atoi(argv[3]) : 1024;
 
-    size_t bytes_A = M * K * sizeof(float);
-    size_t bytes_B = K * N * sizeof(float);
-    size_t bytes_C = M * N * sizeof(float);
+    size_t bytes_A = (size_t)M * (size_t)K * sizeof(float);
+    size_t bytes_B = (size_t)K * (size_t)N * sizeof(float);
+    size_t bytes_C = (size_t)M * (size_t)N * sizeof(float);
 
     float *d_A = nullptr, *d_B = nullptr, *d_C = nullptr;
 
@@ -308,6 +308,7 @@ int main(int argc, char **argv)
                 cudaMemset(d_flush, 0, L2_CACHE_SIZE);
             }
 
+            cudaDeviceSynchronize();
             cudaEventRecord(start);
             gemm_kernel<<<blocks, threads>>>(M, N, K, d_A, d_B, d_C);
             cudaEventRecord(stop);
@@ -338,11 +339,14 @@ int main(int argc, char **argv)
               << "\"rel_variance\": " << final_rel_variance << ", "
               << "\"iterations\": " << run_times.size()
               << "}" << std::endl;
+
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+
+    
     if (d_flush)
         cudaFree(d_flush);
     return 0;
