@@ -1,152 +1,104 @@
 import subprocess
-import random
-import math
 import os
 import csv
 import json
 
-# 1. Define discrete tuning space for Batched GEMM (BMM)
-param_space = {
-    "BATCH_SIZE": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-    
-    "M": [16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 5120, 8192, 14336],
-    "N": [16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 5120, 8192, 14336],
-    "K": [16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 8192],
-    
-    "TILE_M": [4, 8, 16, 32, 64, 96, 128, 192, 256],
-    "TILE_N": [4, 8, 16, 32, 64, 96, 128, 192, 256],
-    "TILE_K": [2, 4, 8, 16, 32, 64],
-    
-    "THREAD_X": [2, 4, 8, 16, 32, 64, 128, 256, 512],
-    "THREAD_Y": [2, 4, 8, 16, 32, 64, 128, 256, 512],
-    "THREAD_Z": [1], 
-    "UNROLL_FACTOR": [1, 2, 4, 8, 16, 32, 64]
-}
+start_idx = 0        
+num_to_evaluate = 500 
 
-def generate_discrete_lhs(space, num_samples):
-    lhs_samples = {}
-    for key, choices in space.items():
-        repeats = math.ceil(num_samples / len(choices))
-        extended_choices = (choices * repeats)[:num_samples]
-        random.shuffle(extended_choices)
-        lhs_samples[key] = extended_choices
+config_filename = "bmm_configurations.csv"
+dataset_filename = "bmm_tuning_dataset_1.csv"
+
+# Read the generated configurations
+configurations = []
+with open(config_filename, mode='r') as csvfile:
+    reader = csv.DictReader(csvfile)
+    for row in reader:
+        configurations.append(row)
+
+chunk_to_evaluate = configurations[start_idx : start_idx + num_to_evaluate]
+
+# Ensure we have the base fields from the input CSV, plus our output metrics
+if len(configurations) > 0:
+    base_fields = list(configurations[0].keys())
+else:
+    base_fields = []
     
-    configurations = []
-    for i in range(num_samples):
-        config = {key: lhs_samples[key][i] for key in space.keys()}
-        configurations.append(config)
+extra_fields = ["latency_ms", "status", "mean_ms", "variance", "rel_variance", "iterations"]
+fieldnames = base_fields + extra_fields
+
+file_exists = os.path.isfile(dataset_filename)
+
+print(f"Evaluating configurations {start_idx} to {start_idx + len(chunk_to_evaluate) - 1}...")
+
+with open(dataset_filename, mode='a', newline='') as csvfile:
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    
+    if not file_exists:
+        writer.writeheader()
+
+    for i, config in enumerate(chunk_to_evaluate):
+        global_idx = start_idx + i
+        print(f"\nEvaluating Config {global_idx+1}/{len(configurations)}: {config}")
         
-    return configurations
+        compile_cmd = [
+            "nvcc", "-O3", "main.cu", "-arch=sm_75", "-o", "bmm_autotune",
+            f"-DTILE_M={config['TILE_M']}", f"-DTILE_N={config['TILE_N']}", f"-DTILE_K={config['TILE_K']}",
+            f"-DTHREAD_X={config['THREAD_X']}", f"-DTHREAD_Y={config['THREAD_Y']}", f"-DTHREAD_Z={config['THREAD_Z']}",
+            f"-DUNROLL_FACTOR={config['UNROLL_FACTOR']}"
+        ]
 
-def main():
-    num_samples = 500
-    configurations = generate_discrete_lhs(param_space, num_samples)
-
-    csv_filename = "bmm_tuning_dataset.csv"
-
-    # Add the new JSON stats to the CSV headers
-    extra_fields = ["latency_ms", "status", "mean_ms", "variance", "rel_variance", "iterations"]
-    fieldnames = list(param_space.keys()) + extra_fields
-
-    file_exists = os.path.isfile(csv_filename)
-
-    print(f"Starting Batched GEMM (BMM) LHS Autotuning: {num_samples} configurations...")
-
-    # 2. Iterate and compile/run
-    with open(csv_filename, mode='a', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
-        if not file_exists:
-            writer.writeheader()
-
-        for idx, config in enumerate(configurations):
-            print(f"\nEvaluating Config {idx+1}/{num_samples}: {config}")
+        try:
+            # Compile the C++ code
+            subprocess.run(compile_cmd, check=True, capture_output=True, text=True)
             
-            compile_cmd = [
-                "nvcc", "-O3", "main.cu", "-o", "bmm_autotune",
-                f"-DTILE_M={config['TILE_M']}", f"-DTILE_N={config['TILE_N']}", f"-DTILE_K={config['TILE_K']}",
-                f"-DTHREAD_X={config['THREAD_X']}", f"-DTHREAD_Y={config['THREAD_Y']}", f"-DTHREAD_Z={config['THREAD_Z']}",
-                f"-DUNROLL_FACTOR={config['UNROLL_FACTOR']}"
-            ]
-            
+            # Run the compiled binary
+            run_cmd = ["./bmm_autotune", str(config['M']), str(config['N']), str(config['K']), str(config['BATCH_SIZE'])]            
             try:
-                # Compile the C++ code
-                subprocess.run(compile_cmd, check=True, capture_output=True, text=True)
-                
-                # Pass M, N, K, and BATCH_SIZE at runtime
-                run_cmd = [
-                    "./bmm_autotune", 
-                    str(config['M']), 
-                    str(config['N']), 
-                    str(config['K']), 
-                    str(config['BATCH_SIZE'])
-                ]
-                
-                try:
-                    result = subprocess.run(run_cmd, check=True, capture_output=True, text=True, timeout=100.0)
-                except subprocess.TimeoutExpired:
-                    print("-> Execution Timeout (Config took >100s). Recording as -1.0.")
-                    data_point = config.copy()
-                    data_point["latency_ms"] = -1.0
-                    data_point["status"] = "timeout"
-                    data_point["mean_ms"] = -1.0
-                    data_point["variance"] = -1.0
-                    data_point["rel_variance"] = -1.0
-                    data_point["iterations"] = 0
-                    writer.writerow(data_point)
-                    csvfile.flush()
-                    continue 
-                
-                # Parse the JSON execution output
-                try:
-                    output_data = json.loads(result.stdout.strip())
-                except json.JSONDecodeError:
-                    print(f"-> Failed Parsing JSON. Raw output: {result.stdout.strip()}")
-                    continue
-                
+                result = subprocess.run(run_cmd, check=True, capture_output=True, text=True, timeout=100.0)
+            except subprocess.TimeoutExpired:
+                print("-> Execution Timeout (Config took >10s). Recording as -1.0.")
                 data_point = config.copy()
-                
-                # Handle the JSON response and map it to CSV columns
-                if output_data.get("status") == "success":
-                    print(f"-> Success: {output_data['median_ms']:.4f} ms (Runs: {output_data['iterations']}, RelVar: {output_data['rel_variance']:.5f})")
-                    
-                    data_point["latency_ms"] = output_data["median_ms"]
-                    data_point["status"] = output_data["status"]
-                    data_point["mean_ms"] = output_data["mean_ms"]
-                    data_point["variance"] = output_data["variance"]
-                    data_point["rel_variance"] = output_data["rel_variance"]
-                    data_point["iterations"] = output_data["iterations"]
-                    
-                else:
-                    # Catches 'invalid_config', 'cuda_oom', etc.
-                    status = output_data.get("status", "unknown_error")
-                    error_msg = output_data.get("error_message", "Unknown error")
-                    print(f"-> Invalid Configuration ({status}): {error_msg}. Recording as -1.0.")
-                    
-                    data_point["latency_ms"] = -1.0
-                    data_point["status"] = status
-                    data_point["mean_ms"] = -1.0
-                    data_point["variance"] = -1.0
-                    data_point["rel_variance"] = -1.0
-                    data_point["iterations"] = 0
-                
+                data_point.update({"latency_ms": -1.0, "status": "timeout", "mean_ms": -1.0, "variance": -1.0, "rel_variance": -1.0, "iterations": 0})
                 writer.writerow(data_point)
                 csvfile.flush()
+                continue 
+            
+            # Parse the JSON execution output
+            try:
+                output_data = json.loads(result.stdout.strip())
+            except json.JSONDecodeError:
+                print(f"-> Failed Parsing JSON. Raw output: {result.stdout.strip()}")
+                continue
+            
+            data_point = config.copy()
+            
+            # Handle the JSON response and map it to CSV columns
+            if output_data.get("status") == "success":
+                print(f"-> Success: {output_data['median_ms']:.4f} ms (Runs: {output_data['iterations']}, RelVar: {output_data['rel_variance']:.5f})")
                 
-            except subprocess.CalledProcessError as e:
-                # Catches actual compilation errors from nvcc
-                print(f"-> Failed Compilation. Error: {e.stderr.strip()}")
+                data_point["latency_ms"] = output_data["median_ms"]
+                data_point["status"] = output_data["status"]
+                data_point["mean_ms"] = output_data["mean_ms"]
+                data_point["variance"] = output_data["variance"]
+                data_point["rel_variance"] = output_data["rel_variance"]
+                data_point["iterations"] = output_data["iterations"]
+            else:
+                status = output_data.get("status", "unknown_error")
+                error_msg = output_data.get("error_message", "Unknown error")
+                print(f"-> Invalid Configuration ({status}): {error_msg}. Recording as -1.0.")
                 
-                data_point = config.copy()
-                data_point["latency_ms"] = -1.0
-                data_point["status"] = "compilation_failed"
-                data_point["mean_ms"] = -1.0
-                data_point["variance"] = -1.0
-                data_point["rel_variance"] = -1.0
-                data_point["iterations"] = 0
-                
-                writer.writerow(data_point)
-                csvfile.flush()
-
-if __name__ == "__main__":
-    main()
+                data_point.update({"latency_ms": -1.0, "status": status, "mean_ms": -1.0, "variance": -1.0, "rel_variance": -1.0, "iterations": 0})
+            
+            writer.writerow(data_point)
+            csvfile.flush()
+            
+        except subprocess.CalledProcessError as e:
+            # Catches actual compilation errors from nvcc
+            print(f"-> Failed Compilation.")
+            
+            data_point = config.copy()
+            data_point.update({"latency_ms": -1.0, "status": "compilation_failed", "mean_ms": -1.0, "variance": -1.0, "rel_variance": -1.0, "iterations": 0})
+            
+            writer.writerow(data_point)
+            csvfile.flush()

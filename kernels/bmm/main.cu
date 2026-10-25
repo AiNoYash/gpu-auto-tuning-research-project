@@ -238,9 +238,9 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    size_t num_elements_A = (size_t)BATCH_SIZE * M * K;
-    size_t num_elements_B = (size_t)BATCH_SIZE * K * N;
-    size_t num_elements_C = (size_t)BATCH_SIZE * M * N;
+    size_t num_elements_A = (size_t)BATCH_SIZE * (size_t)M * (size_t)K;
+    size_t num_elements_B = (size_t)BATCH_SIZE * (size_t)K * (size_t)N;
+    size_t num_elements_C = (size_t)BATCH_SIZE * (size_t)M * (size_t)N;
 
     size_t bytes_A = num_elements_A * sizeof(float);
     size_t bytes_B = num_elements_B * sizeof(float);
@@ -328,6 +328,7 @@ int main(int argc, char **argv)
             if (L2_CACHE_SIZE > 0)
                 cudaMemset(d_flush, 0, L2_CACHE_SIZE);
 
+            cudaDeviceSynchronize();
             cudaEventRecord(start);
             bmm_kernel<<<blocks, threads>>>(BATCH_SIZE, M, N, K, d_A, d_B, d_C);
             cudaEventRecord(stop);
