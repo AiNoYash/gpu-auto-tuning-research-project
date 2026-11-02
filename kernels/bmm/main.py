@@ -4,10 +4,10 @@ import csv
 import json
 
 start_idx = 0        
-num_to_evaluate = 500 
+num_to_evaluate = 7500
 
 config_filename = "bmm_configurations.csv"
-dataset_filename = "bmm_tuning_dataset_1.csv"
+dataset_filename = "bmm_tuning_dataset.csv"
 
 # Read the generated configurations
 configurations = []

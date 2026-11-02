@@ -14,6 +14,7 @@ y = df['latency_ms']
 
 y_log = np.log1p(y)
 
+print(X.columns.tolist())
 
 X_train, X_test, y_train_log, y_test_log = train_test_split(X, y_log, test_size=0.2, random_state=42)
 _, _, _, y_test_orig = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -52,3 +53,6 @@ print("\nModel Evaluation Metrics:")
 print(f"RMSLE (Relative Error focus): {rmsle:.4f}")
 print(f"RMSE (Absolute Error focus):  {rmse:.4f}")
 print(f"MAE (Mean Absolute Error):    {mae:.4f}")
+
+
+model.save_model("xgb_gemm.json")

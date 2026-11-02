@@ -1,0 +1,2 @@
+M,N,K,TILE_M,TILE_N,TILE_K,THREAD_X,THREAD_Y,THREAD_Z,UNROLL_FACTOR,latency_ms,status,mean_ms,variance,rel_variance,iterations
+1024,1024,512,32,128,32,256,2,1,32,6.44136,success,6.47136,0.0188696,0.000450581,20
