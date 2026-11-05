@@ -57,7 +57,7 @@ with open(dataset_filename, mode='a', newline='') as csvfile:
             try:
                 result = subprocess.run(run_cmd, check=True, capture_output=True, text=True, timeout=100.0)
             except subprocess.TimeoutExpired:
-                print("-> Execution Timeout (Config took >10s). Recording as -1.0.")
+                print("-> Execution Timeout (Config took >100s). Recording as -1.0.")
                 data_point = config.copy()
                 data_point.update({"latency_ms": -1.0, "status": "timeout", "mean_ms": -1.0, "variance": -1.0, "rel_variance": -1.0, "iterations": 0})
                 writer.writerow(data_point)

@@ -1,0 +1,204 @@
+=== GEMM Dataset Statistics ===
+
+Total Rows (Pre-deduplication): 7500
+Total Rows (Post-deduplication): 7500
+Duplicates Removed: 0
+
+--- Status Distribution ---
+status
+success               3466
+invalid_config        3029
+compilation_failed     607
+launch_failure         323
+timeout                 75
+
+--- Comprehensive Column Statistics (Numerical) ---
+
+[M] Metrics:
+count       7.500000e+03
+mean        2.606325e+03
+std         3.760045e+03
+min         1.600000e+01
+25%         1.280000e+02
+50%         7.680000e+02
+75%         4.096000e+03
+max         1.433600e+04
+variance    1.413794e+07
+
+[N] Metrics:
+count       7.500000e+03
+mean        2.574874e+03
+std         3.728683e+03
+min         1.600000e+01
+25%         1.280000e+02
+50%         7.680000e+02
+75%         3.072000e+03
+max         1.433600e+04
+variance    1.390308e+07
+
+[K] Metrics:
+count       7.500000e+03
+mean        1.574193e+03
+std         2.178179e+03
+min         1.600000e+01
+25%         1.280000e+02
+50%         7.680000e+02
+75%         2.048000e+03
+max         8.192000e+03
+variance    4.744465e+06
+
+[TILE_M] Metrics:
+count       7500.000000
+mean          88.557867
+std           83.630594
+min            4.000000
+25%           16.000000
+50%           64.000000
+75%          128.000000
+max          256.000000
+variance    6994.076262
+
+[TILE_N] Metrics:
+count       7500.000000
+mean          88.046933
+std           83.567285
+min            4.000000
+25%           16.000000
+50%           64.000000
+75%          128.000000
+max          256.000000
+variance    6983.491063
+
+[TILE_K] Metrics:
+count       7500.000000
+mean          20.918400
+std           21.653486
+min            2.000000
+25%            4.000000
+50%            8.000000
+75%           32.000000
+max           64.000000
+variance     468.873458
+
+[THREAD_X] Metrics:
+count        7500.000000
+mean          113.757333
+std           160.907162
+min             2.000000
+25%             8.000000
+50%            32.000000
+75%           128.000000
+max           512.000000
+variance    25891.114862
+
+[THREAD_Y] Metrics:
+count        7500.000000
+mean          113.428533
+std           161.231298
+min             2.000000
+25%             8.000000
+50%            32.000000
+75%           128.000000
+max           512.000000
+variance    25995.531497
+
+[THREAD_Z] Metrics:
+count       7500.0
+mean           1.0
+std            0.0
+min            1.0
+25%            1.0
+50%            1.0
+75%            1.0
+max            1.0
+variance       0.0
+
+[UNROLL_FACTOR] Metrics:
+count       7500.000000
+mean          18.044933
+std           21.171220
+min            1.000000
+25%            2.000000
+50%            8.000000
+75%           32.000000
+max           64.000000
+variance     448.220544
+
+[latency_ms] Metrics:
+count        7500.000000
+mean           53.614975
+std           258.534644
+min            -1.000000
+25%            -1.000000
+50%            -1.000000
+75%             5.725872
+max          3278.270000
+variance    66840.162017
+
+[mean_ms] Metrics:
+count        7500.000000
+mean           53.675982
+std           258.757998
+min            -1.000000
+25%            -1.000000
+50%            -1.000000
+75%             6.025722
+max          3281.050000
+variance    66955.701372
+
+[variance] Metrics:
+count        7500.000000
+mean           10.088185
+std           181.941881
+min            -1.000000
+25%            -1.000000
+50%            -1.000000
+75%             0.003037
+max          8088.110000
+variance    33102.848039
+
+[rel_variance] Metrics:
+count       7500.000000
+mean          -0.534792
+std            0.502122
+min           -1.000000
+25%           -1.000000
+50%           -1.000000
+75%            0.000024
+max            0.265449
+variance       0.252126
+
+[iterations] Metrics:
+count       7500.000000
+mean          12.637333
+std           17.191196
+min            0.000000
+25%            0.000000
+50%            0.000000
+75%           20.000000
+max           60.000000
+variance     295.537211
+
+--- Latency (ms) Metrics (Success Only) ---
+count         3466.000000
+mean           117.180125
+std            370.326990
+min              0.010992
+25%              1.580512
+50%              6.818300
+75%             43.621475
+max           3278.270000
+variance    137142.079841
+
+--- Top 10 Most Common Matrix Shapes (M, N, K) ---
+M      N     K   
+8192   3072  32      10
+384    512   3072    10
+1024   384   1536     8
+2048   128   256      8
+       1536  32       7
+14336  512   256      7
+8192   4096  1024     7
+32     5120  1536     7
+64     32    1024     7
+768    64    1024     7

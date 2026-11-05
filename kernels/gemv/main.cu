@@ -35,7 +35,7 @@
 #endif
 
 #ifndef L2_CACHE_SIZE
-#define L2_CACHE_SIZE 4194304 // 4 MB (Tesla T4 default)
+#define L2_CACHE_SIZE 1048576 // ? For nvidia gtx 1650 ti
 #endif
 
 // Relative variance threshold: (Variance / Mean^2)

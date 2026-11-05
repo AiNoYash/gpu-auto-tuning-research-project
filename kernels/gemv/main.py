@@ -3,8 +3,8 @@ import os
 import csv
 import json
 
-start_idx = 0        
-num_to_evaluate = 500 
+start_idx = 1595        
+num_to_evaluate = 5905
 
 config_filename = "gemv_configurations.csv"
 dataset_filename = "gemv_tuning_dataset_1.csv"
