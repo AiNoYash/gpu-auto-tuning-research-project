@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 gpu = "t4"
-kernel = "gemv"
+kernel = "bmm"
 
 key_cols_map = {
     "gemm": ['M', 'N', 'K', 'TILE_M', 'TILE_N', 'TILE_K', 'THREAD_X', 'THREAD_Y', 'THREAD_Z', 'UNROLL_FACTOR'],
@@ -13,6 +13,13 @@ key_cols_map = {
 base_path = "../datasets/" + gpu + "/" + kernel + "/"
 csv_files = [f"{base_path}{kernel}_tuning_dataset_{i}.csv" for i in range(1, 16)]
 csv_files.append(f"{base_path}{kernel}_tuning_dataset-3-new.csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_6(2).csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_7(1).csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_8(1).csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_9(1).csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_10.1.csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_10.2.csv")
+csv_files.append(f"{base_path}{kernel}_tuning_dataset_10.3.csv")
 
 key_cols = key_cols_map[kernel]
 

@@ -36,6 +36,7 @@ def preprocess_data_gemm(raw_df):
 
 def objective_log(trial, df):
     features = [
+        "M", "N", "K",
         'TILE_M', 'TILE_N', 'TILE_K', 
         'THREAD_X', 'THREAD_Y', 'THREAD_Z', 
         'UNROLL_FACTOR',
@@ -84,7 +85,7 @@ def objective_log(trial, df):
     bst = xgb.train(
         param,
         dtrain,
-        num_boost_round=1000,
+        num_boost_round=500,
         evals=[(dval, "val")],
         early_stopping_rounds=50,
         callbacks=[pruning_callback],
@@ -92,7 +93,7 @@ def objective_log(trial, df):
     )
     
     # Log best iteration for final retraining
-    best_iter = getattr(bst, 'best_iteration', 1000)
+    best_iter = getattr(bst, 'best_iteration', 500)
     trial.set_user_attr("best_iteration", best_iter)
     
     # Return the best RMSE on the validation set
@@ -112,10 +113,10 @@ if __name__ == "__main__":
     study.optimize(lambda trial: objective_log(trial, df), n_trials=300)
     
     best_params = study.best_trial.params
-    best_iteration = study.best_trial.user_attrs.get("best_iteration", 1000)
+    best_iteration = study.best_trial.user_attrs.get("best_iteration", 500)
     
     # 1.1x trick for full dataset retraining
-    best_params["n_estimators"] = int(best_iteration * 1.1)
+    best_params["n_estimators"] = int(best_iteration)
     
     with open('xgb_logexe_best_params_gemm.json', 'w') as f:
         json.dump(best_params, f, indent=4)

@@ -1,0 +1,145 @@
+=== GEMV Dataset Statistics ===
+
+Total Rows (Pre-deduplication): 7500
+Total Rows (Post-deduplication): 7431
+Duplicates Removed: 69
+
+--- Status Distribution ---
+status
+success               6808
+compilation_failed     623
+
+--- Comprehensive Column Statistics (Numerical) ---
+
+[M] Metrics:
+count       7.431000e+03
+mean        2.588757e+03
+std         3.746169e+03
+min         1.600000e+01
+25%         1.280000e+02
+50%         7.680000e+02
+75%         3.072000e+03
+max         1.433600e+04
+variance    1.403378e+07
+
+[K] Metrics:
+count       7.431000e+03
+mean        1.574576e+03
+std         2.179354e+03
+min         1.600000e+01
+25%         1.280000e+02
+50%         5.120000e+02
+75%         2.048000e+03
+max         8.192000e+03
+variance    4.749584e+06
+
+[BLOCK_DIM_X] Metrics:
+count         7431.000000
+mean           336.480151
+std            346.814729
+min             32.000000
+25%             64.000000
+50%            256.000000
+75%            512.000000
+max           1024.000000
+variance    120280.456369
+
+[ROWS_PER_BLOCK] Metrics:
+count       7431.000000
+mean          10.485668
+std           10.816257
+min            1.000000
+25%            2.000000
+50%            4.000000
+75%           16.000000
+max           32.000000
+variance     116.991416
+
+[TILE_K] Metrics:
+count       7431.000000
+mean          72.639483
+std           84.990381
+min            4.000000
+25%            8.000000
+50%           32.000000
+75%          128.000000
+max          256.000000
+variance    7223.364896
+
+[UNROLL_FACTOR] Metrics:
+count       7431.000000
+mean          18.111694
+std           21.213252
+min            1.000000
+25%            2.000000
+50%            8.000000
+75%           32.000000
+max           64.000000
+variance     450.002058
+
+[latency_ms] Metrics:
+count       7431.000000
+mean           1.278370
+std            4.639654
+min           -1.000000
+25%            0.043008
+50%            0.184256
+75%            0.827680
+max          142.707000
+variance      21.526393
+
+[mean_ms] Metrics:
+count       7431.000000
+mean           1.299912
+std            4.666856
+min           -1.000000
+25%            0.043406
+50%            0.184203
+75%            0.829937
+max          142.703000
+variance      21.779547
+
+[variance] Metrics:
+count       7.431000e+03
+mean       -1.411511e-02
+std         5.278904e-01
+min        -1.000000e+00
+25%         6.025155e-07
+50%         1.354490e-06
+75%         6.538660e-06
+max         7.255370e+00
+variance    2.786683e-01
+
+[rel_variance] Metrics:
+count       7431.000000
+mean          -0.079634
+std            0.279265
+min           -1.000000
+25%            0.000004
+50%            0.000042
+75%            0.000563
+max            0.744641
+variance       0.077989
+
+[iterations] Metrics:
+count       7431.000000
+mean          24.002153
+std           15.456168
+min            0.000000
+25%           20.000000
+50%           20.000000
+75%           20.000000
+max           60.000000
+variance     238.893131
+
+--- Latency (ms) Metrics (Success Only) ---
+count       6808.000000
+mean           1.486864
+std            4.793536
+min            0.006864
+25%            0.063360
+50%            0.233416
+75%            0.973448
+max          142.707000
+variance      22.977991
+

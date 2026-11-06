@@ -78,6 +78,7 @@ def objective(trial, df):
     
     # Features and Target mapping
     features = [
+        "M", "N", "K",
         'TILE_M', 'TILE_N', 'TILE_K', 
         'THREAD_X', 'THREAD_Y', 'THREAD_Z', 
         'UNROLL_FACTOR',
@@ -113,6 +114,7 @@ def objective(trial, df):
     param = {
         "objective": "rank:pairwise",
         "eval_metric": "ndcg", # Fast built-in metric for early stopping
+        "ndcg_exp_gain": False,
         "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.05, log=True),
         "max_depth": trial.suggest_int("max_depth", 3, 10),
         "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
@@ -132,14 +134,14 @@ def objective(trial, df):
     bst = xgb.train(
         param,
         dtrain,
-        num_boost_round=1000,
+        num_boost_round=500,
         evals=[(dval, "val")],
         early_stopping_rounds=50,
         callbacks=[pruning_callback],
         verbose_eval=False
     )
     
-    best_iter = getattr(bst, 'best_iteration', 1000)
+    best_iter = getattr(bst, 'best_iteration', 500)
     trial.set_user_attr("best_iteration", best_iter)
     
     # Generate predictions on the validation set for the final Optuna score
@@ -171,7 +173,7 @@ if __name__ == "__main__":
     best_iteration = study.best_trial.user_attrs.get("best_iteration", 1000)
     
     # Apply the 1.1x n_estimators trick for full dataset retraining
-    best_params["n_estimators"] = int(best_iteration * 1.1)
+    best_params["n_estimators"] = int(best_iteration)
     
     # Save to JSON
     with open('xgb_rank_best_params_gemm.json', 'w') as f:
