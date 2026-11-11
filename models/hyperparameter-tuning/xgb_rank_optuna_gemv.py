@@ -1,153 +1,512 @@
+
 import pandas as pd
 import numpy as np
 import xgboost as xgb
 import optuna
-from optuna_integration.xgboost import XGBoostPruningCallback  
-from scipy.stats import spearmanr, ConstantInputWarning        
-from sklearn.model_selection import GroupShuffleSplit
+from scipy.stats import spearmanr, ConstantInputWarning
 import warnings
 import json
 
-# Suppress scipy spearman warnings for very small groups
+# Suppress scipy spearman warnings for small groups
 warnings.filterwarnings("ignore", category=ConstantInputWarning)
 
+
+# ==========================================
+# Configuration
+# ==========================================
+
+RANDOM_STATE = 42
+
+N_SPLITS = 5
+N_TRIALS = 300
+
+MAX_BOOST_ROUNDS = 500
+EARLY_STOPPING_ROUNDS = 50
+
+FINAL_ESTIMATOR_MULTIPLIER = 1.1
+
+DATASET_PATH = "../../datasets/t4/gemv/gemv_dataset.csv"
+
+SPLITS_PATH = "gemv_group_cv_splits.npz"
+
+PARAMS_OUTPUT = "xgb_rank_best_params_gemv.json"
+CV_SUMMARY_OUTPUT = "xgb_rank_cv_summary_gemv.json"
+
+
+FEATURES = [
+    "M", "K",
+    "BLOCK_DIM_X", "ROWS_PER_BLOCK", "TILE_K", "UNROLL_FACTOR",
+    "GRID_SIZE",
+    "SHMEM_ELEMENTS",
+    "WORK_PER_THREAD_K",
+    "TILE_K_ALIGNED",
+    "UNROLL_ALIGNMENT",
+    "BOUNDARY_ALIGNMENT_M",
+    "BOUNDARY_ALIGNMENT_K"
+]
+
+
+# ==========================================
+# 1. Preprocessing
+# ==========================================
+
 def preprocess_data_gemv(raw_df):
-    """Filters columns, adds derived features for GEMV, and penalizes invalid configs."""
+
     keep_cols = [
-        'M', 'K', 
-        'BLOCK_DIM_X', 'ROWS_PER_BLOCK', 'TILE_K', 'UNROLL_FACTOR', 
-        'latency_ms'
+        "M", "K",
+        "BLOCK_DIM_X", "ROWS_PER_BLOCK",
+        "TILE_K", "UNROLL_FACTOR",
+        "latency_ms"
     ]
+
     df = raw_df[keep_cols].copy()
-    
-    # Penalize invalid configs (-1.0) with a massive latency penalty
-    df.loc[df['latency_ms'] == -1.0, 'latency_ms'] = 1e8
-    
-    # ==========================================
+
+    # Convert invalid configurations to a massive latency penalty
+    df.loc[df["latency_ms"] == -1.0, "latency_ms"] = 1e8
+
+    # ======================================
     # Derived Features
-    # ==========================================
-    # 1. Grid Size (Total thread blocks launched)
-    df['GRID_SIZE'] = (df['M'] + df['ROWS_PER_BLOCK'] - 1) // df['ROWS_PER_BLOCK']
-    
-    # 2. Shared Memory Elements (Proxy for occupancy limits)
-    df['SHMEM_ELEMENTS'] = df['TILE_K'] + (df['ROWS_PER_BLOCK'] * df['BLOCK_DIM_X'])
-    
-    # 3. Work per Thread in K (Proxy for inner loop iterations / register pressure)
-    df['WORK_PER_THREAD_K'] = (df['TILE_K'] + df['BLOCK_DIM_X'] - 1) // df['BLOCK_DIM_X']
-    
-    # 4. Perfect Tile Loading/Compute Balance (Avoids warp divergence)
-    df['TILE_K_ALIGNED'] = (df['TILE_K'] % df['BLOCK_DIM_X'] == 0).astype(int)
-    
-    # 5. Perfect Unroll Alignment (Avoids compiler tail loops)
-    df['UNROLL_ALIGNMENT'] = (df['WORK_PER_THREAD_K'] % df['UNROLL_FACTOR'] == 0).astype(int)
-    
-    # 6. Global M-Boundary Alignment (Avoids divergence on global_row < M)
-    df['BOUNDARY_ALIGNMENT_M'] = (df['M'] % df['ROWS_PER_BLOCK'] == 0).astype(int)
-    
-    # 7. Global K-Boundary Alignment (Avoids divergence on gk < K)
-    df['BOUNDARY_ALIGNMENT_K'] = (df['K'] % df['TILE_K'] == 0).astype(int)
-    
-    # Force 32-bit types to prevent XGBoost DMatrix casting bottlenecks
-    for col in df.columns:
-        if df[col].dtype == 'float64':
-            df[col] = df[col].astype('float32')
-        elif df[col].dtype == 'int64':
-            df[col] = df[col].astype('int32')
-            
+    # ======================================
+
+    df["GRID_SIZE"] = (
+        (df["M"] + df["ROWS_PER_BLOCK"] - 1)
+        // df["ROWS_PER_BLOCK"]
+    )
+
+    df["SHMEM_ELEMENTS"] = (
+        df["TILE_K"] +
+        (df["ROWS_PER_BLOCK"] * df["BLOCK_DIM_X"])
+    )
+
+    df["WORK_PER_THREAD_K"] = (
+        (df["TILE_K"] + df["BLOCK_DIM_X"] - 1)
+        // df["BLOCK_DIM_X"]
+    )
+
+    df["TILE_K_ALIGNED"] = (
+        df["TILE_K"] % df["BLOCK_DIM_X"] == 0
+    ).astype(int)
+
+    df["UNROLL_ALIGNMENT"] = (
+        df["WORK_PER_THREAD_K"] % df["UNROLL_FACTOR"] == 0
+    ).astype(int)
+
+    df["BOUNDARY_ALIGNMENT_M"] = (
+        df["M"] % df["ROWS_PER_BLOCK"] == 0
+    ).astype(int)
+
+    df["BOUNDARY_ALIGNMENT_K"] = (
+        df["K"] % df["TILE_K"] == 0
+    ).astype(int)
+
+    # Group ID: each unique GEMV workload gets one qid
+    df["qid"] = df.groupby(
+        ["M", "K"],
+        sort=False
+    ).ngroup()
+
+    # Rank latencies within each workload
+    # Highest latency = rank 1
+    # Lowest latency = highest rank
+
+    df["target"] = (
+        df.groupby("qid")["latency_ms"]
+        .rank(ascending=False, method="dense")
+        .astype(int)
+    )
+
     return df
 
+
+# ==========================================
+# 2. Custom Grouped Spearman Metric
+# ==========================================
+
 def calculate_grouped_spearman(y_true, y_pred, qids):
-    """Calculates the average Spearman correlation across all qid groups."""
-    df_eval = pd.DataFrame({'true': y_true, 'pred': y_pred, 'qid': qids})
+
+    df_eval = pd.DataFrame({
+        "true": y_true,
+        "pred": y_pred,
+        "qid": qids
+    })
+
     spearman_scores = []
-    
-    for _, group in df_eval.groupby('qid'):
+
+    for _, group in df_eval.groupby("qid"):
+
         if len(group) > 1:
-            preds = group['pred'].values + np.random.normal(0, 1e-6, len(group))
-            rho, _ = spearmanr(group['true'].values, preds)
-            if not np.isnan(rho):
+
+            preds = group["pred"].values
+
+            rho, _ = spearmanr(
+                group["true"].values,
+                preds
+            )
+
+            if np.isnan(rho):
+                if group["true"].nunique() > 1:
+                    spearman_scores.append(0.0)
+            else:
                 spearman_scores.append(rho)
-                
-    return np.mean(spearman_scores) if spearman_scores else 0.0
 
-def objective_gemv(trial, df):
-    # Features and Target mapping
-    features = [
-        'M', 'K',
-        'BLOCK_DIM_X', 'ROWS_PER_BLOCK', 'TILE_K', 'UNROLL_FACTOR',
-        'GRID_SIZE', 'SHMEM_ELEMENTS', 'WORK_PER_THREAD_K', 
-        'TILE_K_ALIGNED', 'UNROLL_ALIGNMENT', 
-        'BOUNDARY_ALIGNMENT_M', 'BOUNDARY_ALIGNMENT_K'
-    ]
-    
-    # Group by M and K for GEMV
-    df['qid'] = df.groupby(['M', 'K']).ngroup()
+    return (
+        np.mean(spearman_scores)
+        if spearman_scores else 0.0
+    )
 
-    # Rank latencies within each workload size (qid)
-    df['target'] = df.groupby('qid')['latency_ms'].rank(ascending=False, method='dense').astype(int)
-    
-    # Sort by qid for XGBoost ranking
-    df = df.sort_values('qid').reset_index(drop=True)
-    
-    # Group-aware train/validation split (80/20)
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-    train_idx, val_idx = next(gss.split(df, groups=df['qid']))
-    
-    train_data = df.iloc[train_idx]
-    val_data = df.iloc[val_idx]
-    
-    dtrain = xgb.DMatrix(train_data[features], label=train_data['target'], qid=train_data['qid'])
-    dval = xgb.DMatrix(val_data[features], label=val_data['target'], qid=val_data['qid'])
-    
+
+# ==========================================
+# 3. Load Existing Data Splits
+# ==========================================
+
+def load_data_splits(df):
+
+    # Load the exact splits generated by GEMV Logexe script
+    splits = np.load(SPLITS_PATH)
+
+    dev_idx = splits["development_indices"]
+    holdout_idx = splits["holdout_indices"]
+
+    # Recreate the same development and holdout datasets
+    dev_df = df.iloc[dev_idx].reset_index(drop=True)
+    holdout_df = df.iloc[holdout_idx].reset_index(drop=True)
+
+    # Load the exact same 5 CV folds
+    cv_splits = []
+
+    for fold in range(N_SPLITS):
+
+        train_idx = splits[f"fold_{fold + 1}_train_idx"]
+        val_idx = splits[f"fold_{fold + 1}_val_idx"]
+
+        cv_splits.append((train_idx, val_idx))
+
+    return dev_df, holdout_df, cv_splits
+
+
+# ==========================================
+# 4. Optuna Objective Function
+# ==========================================
+
+def objective_gemv(trial, dev_df, cv_splits):
+
     param = {
         "objective": "rank:pairwise",
         "eval_metric": "ndcg",
         "ndcg_exp_gain": False,
-        "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.05, log=True),
-        "max_depth": trial.suggest_int("max_depth", 3, 10),
-        "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
-        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-        "gamma": trial.suggest_float("gamma", 0.0, 5.0),
-        "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-        "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-        "random_state": 42,
-        "tree_method": "hist" 
+
+        "learning_rate": trial.suggest_float(
+            "learning_rate", 0.005, 0.05, log=True
+        ),
+
+        "max_depth": trial.suggest_int(
+            "max_depth", 3, 10
+        ),
+
+        "min_child_weight": trial.suggest_int(
+            "min_child_weight", 1, 10
+        ),
+
+        "subsample": trial.suggest_float(
+            "subsample", 0.5, 1.0
+        ),
+
+        "colsample_bytree": trial.suggest_float(
+            "colsample_bytree", 0.5, 1.0
+        ),
+
+        "gamma": trial.suggest_float(
+            "gamma", 0.0, 5.0
+        ),
+
+        "reg_alpha": trial.suggest_float(
+            "reg_alpha", 1e-3, 10.0, log=True
+        ),
+
+        "reg_lambda": trial.suggest_float(
+            "reg_lambda", 1e-3, 10.0, log=True
+        ),
+
+        "seed": RANDOM_STATE,
+        "tree_method": "hist",
+        "verbosity": 0
     }
-    
-    pruning_callback = XGBoostPruningCallback(trial, "val-ndcg")
-    
-    bst = xgb.train(
-        param,
-        dtrain,
-        num_boost_round=500,
-        evals=[(dval, "val")],
-        early_stopping_rounds=50,
-        callbacks=[pruning_callback],
-        verbose_eval=False
+
+    fold_spearman_scores = []
+    fold_best_rounds = []
+
+    # ======================================
+    # Run all 5 CV folds
+    # ======================================
+
+    for fold, (train_idx, val_idx) in enumerate(cv_splits):
+
+        train_data = dev_df.iloc[train_idx].copy()
+        val_data = dev_df.iloc[val_idx].copy()
+
+        # XGBoost ranking requires data sorted by qid
+        train_data = train_data.sort_values("qid")
+        val_data = val_data.sort_values("qid")
+
+        # Create XGBoost DMatrices
+        dtrain = xgb.DMatrix(
+            train_data[FEATURES],
+            label=train_data["target"],
+            qid=train_data["qid"]
+        )
+
+        dval = xgb.DMatrix(
+            val_data[FEATURES],
+            label=val_data["target"],
+            qid=val_data["qid"]
+        )
+
+        # Train with early stopping independently on this fold
+        bst = xgb.train(
+            params=param,
+            dtrain=dtrain,
+            num_boost_round=MAX_BOOST_ROUNDS,
+            evals=[(dval, "val")],
+            early_stopping_rounds=EARLY_STOPPING_ROUNDS,
+            verbose_eval=False
+        )
+
+        # Best iteration is zero-based
+        best_rounds = int(bst.best_iteration) + 1
+
+        fold_best_rounds.append(best_rounds)
+
+        # Predict using the best iteration
+        preds = bst.predict(
+            dval,
+            iteration_range=(0, best_rounds)
+        )
+
+        # Calculate grouped Spearman
+        spearman_score = calculate_grouped_spearman(
+            val_data["target"].values,
+            preds,
+            val_data["qid"].values
+        )
+
+        fold_spearman_scores.append(
+            float(spearman_score)
+        )
+
+        # ==================================
+        # Optuna Fold-level Pruning
+        # ==================================
+
+        # Running mean Spearman across completed folds
+        running_mean_spearman = float(
+            np.mean(fold_spearman_scores)
+        )
+
+        # Report intermediate result to Optuna
+        trial.report(running_mean_spearman, step=fold)
+
+        # Check whether this trial should be pruned
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+
+    # ======================================
+    # Aggregate CV Results
+    # ======================================
+
+    mean_spearman = float(
+        np.mean(fold_spearman_scores)
     )
-    
-    best_iter = getattr(bst, 'best_iteration', 500)
-    trial.set_user_attr("best_iteration", best_iter)
-    
-    preds = bst.predict(dval)
-    spearman_score = calculate_grouped_spearman(val_data['target'].values, preds, val_data['qid'].values)
-    
-    return spearman_score
+
+    std_spearman = float(
+        np.std(fold_spearman_scores)
+    )
+
+    # Store useful information for the best trial
+    trial.set_user_attr(
+        "fold_spearman_scores",
+        fold_spearman_scores
+    )
+
+    trial.set_user_attr(
+        "fold_best_rounds",
+        fold_best_rounds
+    )
+
+    trial.set_user_attr(
+        "mean_spearman",
+        mean_spearman
+    )
+
+    trial.set_user_attr(
+        "std_spearman",
+        std_spearman
+    )
+
+    # Optuna maximizes mean grouped Spearman
+    return mean_spearman
+
+
+# ==========================================
+# 5. Main Execution
+# ==========================================
 
 if __name__ == "__main__":
-    raw_df = pd.read_csv('../../datasets/t4/gemv/gemv_dataset.csv')
-    
+
+    # Load dataset
+    raw_df = pd.read_csv(DATASET_PATH)
+
+    # Preprocessing
     df = preprocess_data_gemv(raw_df)
-    
-    study = optuna.create_study(direction="maximize", pruner=optuna.pruners.MedianPruner(n_warmup_steps=30))
-    study.optimize(lambda trial: objective_gemv(trial, df), n_trials=300)
-    
-    best_params = study.best_trial.params
-    best_iteration = study.best_trial.user_attrs.get("best_iteration", 500)
-    best_params["n_estimators"] = int(best_iteration)
-    
-    with open('xgb_rank_best_params_gemv.json', 'w') as f:
+
+    # Load the exact splits from GEMV Logexe script
+    dev_df, holdout_df, cv_splits = load_data_splits(df)
+
+    print("\n========== DATA SPLIT ==========")
+
+    print(f"Total rows: {len(df)}")
+    print(f"Development rows: {len(dev_df)}")
+    print(f"Holdout rows: {len(holdout_df)}")
+
+    print(
+        f"Development workload groups: "
+        f"{dev_df['qid'].nunique()}"
+    )
+
+    print(
+        f"Holdout workload groups: "
+        f"{holdout_df['qid'].nunique()}"
+    )
+
+    # ======================================
+    # Optuna Optimization
+    # ======================================
+
+    print("\n========== OPTUNA OPTIMIZATION ==========")
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(
+            seed=RANDOM_STATE
+        ),
+        pruner=optuna.pruners.MedianPruner(
+            n_startup_trials=10,
+            n_warmup_steps=1,
+            interval_steps=1
+        )
+    )
+
+    study.optimize(
+        lambda trial: objective_gemv(
+            trial,
+            dev_df,
+            cv_splits
+        ),
+        n_trials=N_TRIALS
+    )
+
+    # ======================================
+    # Extract Best Trial
+    # ======================================
+
+    best_trial = study.best_trial
+
+    best_params = dict(best_trial.params)
+
+    fold_spearman_scores = best_trial.user_attrs[
+        "fold_spearman_scores"
+    ]
+
+    fold_best_rounds = best_trial.user_attrs[
+        "fold_best_rounds"
+    ]
+
+    # Median of the best boosting rounds across 5 folds
+    median_best_rounds = float(
+        np.median(fold_best_rounds)
+    )
+
+    # ======================================
+    # Adjust Final n_estimators
+    # ======================================
+
+    final_n_estimators = int(
+        np.ceil(
+            median_best_rounds *
+            FINAL_ESTIMATOR_MULTIPLIER
+        )
+    )
+
+    best_params["n_estimators"] = final_n_estimators
+
+    # ======================================
+    # Save Best Parameters
+    # ======================================
+
+    with open(PARAMS_OUTPUT, "w") as f:
         json.dump(best_params, f, indent=4)
-    
-    print(f"Saved optimized parameters to xgboost_gemv_best_params.json")
+
+    # Save CV diagnostics separately
+    cv_summary = {
+        "best_cv_spearman": float(best_trial.value),
+
+        "fold_spearman_scores": fold_spearman_scores,
+
+        "mean_cv_spearman": float(
+            np.mean(fold_spearman_scores)
+        ),
+
+        "std_cv_spearman": float(
+            np.std(fold_spearman_scores)
+        ),
+
+        "fold_best_rounds": fold_best_rounds,
+
+        "median_cv_best_rounds": median_best_rounds,
+
+        "final_estimator_multiplier": FINAL_ESTIMATOR_MULTIPLIER,
+
+        "final_n_estimators": final_n_estimators,
+
+        "n_splits": N_SPLITS,
+
+        "n_trials": N_TRIALS
+    }
+
+    with open(CV_SUMMARY_OUTPUT, "w") as f:
+        json.dump(cv_summary, f, indent=4)
+
+    # ======================================
+    # Print Results
+    # ======================================
+
+    print("\n========== OPTIMIZATION COMPLETE ==========")
+
+    print(
+        f"Best mean CV Spearman: "
+        f"{best_trial.value:.6f}"
+    )
+
+    print("\nFold Spearman Scores:")
+
+    for i, score in enumerate(fold_spearman_scores):
+        print(f"Fold {i + 1}: {score:.6f}")
+
+    print("\nFold best boosting rounds:")
+
+    for i, rounds in enumerate(fold_best_rounds):
+        print(f"Fold {i + 1}: {rounds}")
+
+    print(
+        f"\nMedian best rounds: {median_best_rounds}"
+    )
+
+    print(
+        f"Final n_estimators "
+        f"(median * {FINAL_ESTIMATOR_MULTIPLIER}): "
+        f"{final_n_estimators}"
+    )
+
+    print(f"\nSaved parameters: {PARAMS_OUTPUT}")
+    print(f"Saved CV summary: {CV_SUMMARY_OUTPUT}")
+
+    print("\nThe 20% holdout dataset was NOT used for tuning.")
