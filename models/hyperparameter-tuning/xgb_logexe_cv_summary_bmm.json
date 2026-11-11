@@ -1,0 +1,24 @@
+{
+    "best_cv_rmse": 2.1039754436346385,
+    "fold_rmses": [
+        2.0148432900863043,
+        2.0209317836791922,
+        2.0976487006436693,
+        2.147440872293963,
+        2.2390125714700653
+    ],
+    "mean_cv_rmse": 2.1039754436346385,
+    "std_cv_rmse": 0.08367208293620233,
+    "fold_best_rounds": [
+        488,
+        498,
+        497,
+        500,
+        420
+    ],
+    "median_cv_best_rounds": 497.0,
+    "final_estimator_multiplier": 1.1,
+    "final_n_estimators": 547,
+    "n_splits": 5,
+    "n_trials": 300
+}

@@ -1,0 +1,24 @@
+{
+    "best_cv_spearman": 0.8331822144467365,
+    "fold_spearman_scores": [
+        0.8914928171415816,
+        0.9009712365929962,
+        0.7756347198910301,
+        0.7639681516739425,
+        0.8338441469341318
+    ],
+    "mean_cv_spearman": 0.8331822144467365,
+    "std_cv_spearman": 0.05674190106077758,
+    "fold_best_rounds": [
+        16,
+        64,
+        48,
+        28,
+        21
+    ],
+    "median_cv_best_rounds": 28.0,
+    "final_estimator_multiplier": 1.1,
+    "final_n_estimators": 31,
+    "n_splits": 5,
+    "n_trials": 300
+}
