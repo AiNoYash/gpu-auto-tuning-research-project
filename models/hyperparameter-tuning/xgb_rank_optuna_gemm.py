@@ -154,11 +154,11 @@ def calculate_grouped_spearman(y_true, y_pred, qids):
                 preds
             )
 
-        if np.isnan(rho):
-            if group["true"].nunique() > 1:
-                spearman_scores.append(0.0)
-        else:
-            spearman_scores.append(rho)
+            if np.isnan(rho):
+                if group["true"].nunique() > 1:
+                    spearman_scores.append(0.0)
+            else:
+                spearman_scores.append(rho)
 
 
     return (
