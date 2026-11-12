@@ -1,0 +1,163 @@
+
+==================================================================================
+0. SETUP AND SANITY CHECKS
+==================================================================================
+Dataset file        : ../../datasets/t4/bmm/bmm_dataset.csv
+Model file          : ../xgb_logexe_model_bmm.json
+Split file          : ../hyperparameter-tuning/bmm_group_cv_splits.npz
+Boosted rounds      : 547
+XGBoost version     : 3.4.1
+Dataset rows        : 7500
+Train               : 6004 configs, 5424 matrix sizes
+Test                : 1496 configs, 1356 matrix sizes
+Important: NPZ indices are positional. The CSV must have exactly the same rows in exactly the same order as when the split file was created.
+Matrix sizes shared between train and test: 0 (should be 0)
+Invalid configurations: train 64.07 % | test 65.24 %
+Valid test configurations: 520
+
+==================================================================================
+1. REGRESSION METRICS -- VALID CONFIGURATIONS ONLY
+==================================================================================
+TRAIN (development, in-sample) (n = 2157)
+  Log-space RMSE        : 0.5670
+  Mean log error (bias) : +0.2139  (negative = model optimistic)
+  Median RPE            : 26.06 %
+  MAPE                  : 63.00 %
+  R^2 (log space)       : 0.9510
+
+TEST (held-out) (n = 520)
+  Log-space RMSE        : 1.9164
+  Mean log error (bias) : +0.9349  (negative = model optimistic)
+  Median RPE            : 65.32 %
+  MAPE                  : 6131.60 %
+  R^2 (log space)       : 0.4351
+
+Train/test log-RMSE gap (valid configurations only; test - train): +1.3494
+Note: Log RMSE, log bias and R^2 are calculated in log space. RPE/MAPE are relative errors after exponentiating the log-space error.
+
+==================================================================================
+2. REGRESSION METRICS -- ALL CONFIGURATIONS (VALID + INVALID)
+==================================================================================
+TRAIN (development, in-sample) (n = 6004)
+  Log-space RMSE        : 0.5140
+  Mean log error (bias) : +0.0006  (negative = model optimistic)
+  Median RPE            : 7.39 %
+  MAPE                  : 30.54 %
+  R^2 (log space)       : 0.9950
+
+TEST (held-out) (n = 1496)
+  Log-space RMSE        : 2.0340
+  Mean log error (bias) : -0.1262  (negative = model optimistic)
+  Median RPE            : 18.60 %
+  MAPE                  : 2149.18 %
+  R^2 (log space)       : 0.9227
+
+Train/test log-RMSE gap (valid + invalid configurations; test - train): +1.5200
+Caution: invalid targets use the synthetic 1e8 latency penalty. All combined metrics therefore mix latency regression with the model's ability to reproduce the invalid-penalty target. Combined MAPE/RPE are relative errors against that penalty, not ordinary measured-latency percentage errors.
+
+==================================================================================
+3. ACCURACY IN THE GOOD REGION (FASTEST 10% VALID CONFIGS PER MATRIX SIZE)
+==================================================================================
+TEST, good region (n = 499)
+  Log-space RMSE        : 1.9217
+  Mean log error (bias) : +0.9391  (negative = model optimistic)
+  Median RPE            : 65.03 %
+  MAPE                  : 6215.02 %
+  R^2 (log space)       : 0.4386
+Note: R^2 can be low or negative here because the true latency range is deliberately narrow. RMSE, RPE, MAPE and bias are more useful.
+
+==================================================================================
+4. ERROR SPREAD ACROSS HELD-OUT MATRIX SIZES (VALID CONFIGS ONLY)
+==================================================================================
+Per-size log-RMSE: mean 1.2057 | median 0.6408 | std 1.5013 | 5th pct 0.0566 | 95th pct 4.5562 | min 0.0025 | max 8.6745 | matrix sizes 499
+Worst 5 matrix sizes (BATCH_SIZE, M, N, K, log-RMSE, #valid configs):
+Batch=256,   768 x 14336 x 16 : 8.6745 (n=1)
+Batch=128,   5120 x 64 x 1536 : 8.5493 (n=1)
+Batch=128,   2048 x 8192 x 128 : 8.4764 (n=1)
+Batch=128,   3072 x 256 x 1024 : 8.2109 (n=1)
+Batch=256,   14336 x 32 x 512 : 7.6679 (n=1)
+
+==================================================================================
+5. INVALID-CONFIGURATION DETECTION (THRESHOLD ON PREDICTED LOG-LATENCY)
+==================================================================================
+Slowest valid TRAIN config (log): 8.100
+Invalid penalty (log)           : 18.421
+Threshold used                  : 13.260 (training-derived midpoint)
+ROC-AUC (threshold-free)       : 0.9955
+Average Precision (PR-AUC)     : 0.9977
+
+At the chosen threshold (13.260):
+  Precision : 0.9882
+  Recall    : 0.9447 (fraction of invalid configs caught)
+  F1        : 0.9660
+  Accuracy  : 0.9566
+  Confusion : TP 922 | FP 11 | FN 54 | TN 509
+  FN = invalid configs predicted valid: 54 of 976 (5.53 %)
+
+Threshold sweep (sanity check):
+   threshold  precision     recall         F1
+        8.10     0.9221     0.9949     0.9571
+       10.06     0.9590     0.9816     0.9701
+       12.03     0.9791     0.9611     0.9700
+       13.99     0.9935     0.9355     0.9636
+       15.96     1.0000     0.8883     0.9409
+       17.92     1.0000     0.8125     0.8966
+
+==================================================================================
+6. RANKING METRICS ON LOG-EXE PREDICTIONS (GROUPED BY MATRIX SIZE)
+==================================================================================
+Ranking direction: lower predicted log-latency is better. For shared ranking metrics, ranking_score = -pred_log.
+Spearman correlation (predicted latency vs true latency; higher is better):
+  Grouped, all configs (invalid included): mean 0.5997 | median 0.8660 | std 0.5152 | min -0.5000 | max 1.0000 | groups 6
+  Grouped, valid configs only           : mean 0.2500 | median 0.2500 | std 0.7500 | min -0.5000 | max 1.0000 | groups 2
+  Pooled global, all configs (supplementary): 0.8421
+  Pooled global, valid only (supplementary)  : 0.9448
+  Pooled values mix matrix sizes and can reflect the fact that larger matrices are slower; grouped values are the primary results.
+
+Pairwise accuracy (unequal-latency pairs only; predicted ties receive 0.5):
+  Grouped, all configs (invalid included): mean 0.9518 | median 1.0000 | std 0.2013 | min 0.0000 | max 1.0000 | groups 83
+  Grouped, valid configs only           : mean 0.7544 | median 1.0000 | std 0.4166 | min 0.0000 | max 1.0000 | groups 19
+
+NDCG (invalid = 0; valid = 1..30 based on within-workload latency rank; linear gain):
+  all configs (invalid included):
+    NDCG@5      : mean 0.9794 | median 1.0000 | std 0.0815 | min 0.6506 | max 1.0000 | groups 83
+    NDCG@10     : mean 0.9794 | median 1.0000 | std 0.0815 | min 0.6506 | max 1.0000 | groups 83
+    NDCG@20     : mean 0.9794 | median 1.0000 | std 0.0815 | min 0.6506 | max 1.0000 | groups 83
+    NDCG (full) : mean 0.9794 | median 1.0000 | std 0.0815 | min 0.6506 | max 1.0000 | groups 83
+  valid configs only:
+    NDCG@5      : mean 0.9099 | median 1.0000 | std 0.1509 | min 0.6506 | max 1.0000 | groups 19
+    NDCG@10     : mean 0.9099 | median 1.0000 | std 0.1509 | min 0.6506 | max 1.0000 | groups 19
+    NDCG@20     : mean 0.9099 | median 1.0000 | std 0.1509 | min 0.6506 | max 1.0000 | groups 19
+    NDCG (full) : mean 0.9099 | median 1.0000 | std 0.1509 | min 0.6506 | max 1.0000 | groups 19
+
+Top-k fraction of optimal (1.0 = true optimum selected):
+  Formula: true workload optimum / best true latency among predicted top-k.
+  Top-1 : mean 0.9943 | median 1.0000 | 5th pct 1.0000 | min 0.0855 | groups 499
+  Top-5 : mean 1.0000 | median 1.0000 | 5th pct 1.0000 | min 1.0000 | groups 499
+  Top-10: mean 1.0000 | median 1.0000 | 5th pct 1.0000 | min 1.0000 | groups 499
+
+Invalid selections in the model's predicted top-k configurations:
+  Candidate fraction = mean invalid fraction among the selected top-k.
+  Workload rate      = fraction of matrix sizes with at least one invalid in top-k.
+  Top-1  invalid candidate fraction: 63.20 % (mean 0.6320 | median 1.0000 | std 0.4823 | min 0.0000 | max 1.0000 | groups 1356)
+       workloads with >=1 invalid: 63.20 % (mean 0.6320 | median 1.0000 | std 0.4823 | min 0.0000 | max 1.0000 | groups 1356)
+  Top-5  invalid candidate fraction: 65.62 % (mean 0.6562 | median 1.0000 | std 0.4623 | min 0.0000 | max 1.0000 | groups 1356)
+       workloads with >=1 invalid: 67.99 % (mean 0.6799 | median 1.0000 | std 0.4665 | min 0.0000 | max 1.0000 | groups 1356)
+  Top-10 invalid candidate fraction: 65.62 % (mean 0.6562 | median 1.0000 | std 0.4623 | min 0.0000 | max 1.0000 | groups 1356)
+       workloads with >=1 invalid: 67.99 % (mean 0.6799 | median 1.0000 | std 0.4665 | min 0.0000 | max 1.0000 | groups 1356)
+
+==================================================================================
+7. INFERENCE LATENCY (XGBOOST PREDICTION)
+==================================================================================
+xgboost 3.4.1 | python 3.12.3 | CPU logical cores: 12 | x86_64
+Timing measures XGBoost inference and, separately, DMatrix construction plus inference. It does not include the full PSO candidate-generation pipeline.
+Sanity: NumPy-DMatrix vs DataFrame-DMatrix predictions, max absolute difference = 0.00e+00
+
+  batch |  predict only: median / p95 ms  |  DMatrix + predict: median / p95 ms  
+        |   ms/call    p95 ms  us/config |   ms/call    p95 ms  us/config
+      1 |     6.008    11.096    6008.11 |    23.957    30.018   23956.87
+     32 |     5.997    11.058     187.41 |    36.474    51.879    1139.81
+    128 |     6.952    15.723      54.31 |    43.021    67.793     336.10
+   1024 |     6.795    13.318       6.64 |    57.781    71.370      56.43
+   1496 |     6.043    11.914       4.04 |    66.216   122.268      44.26
+Median and 95th-percentile times are measured after warm-up. The DMatrix + predict column includes input-matrix construction.

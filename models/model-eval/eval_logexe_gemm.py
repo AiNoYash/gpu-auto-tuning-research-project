@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""
-Evaluate the XGBoost log-latency GEMM surrogate (reg:squarederror on log(latency_ms)).
+"""Evaluate the GEMM XGBoost log-execution-time regression surrogate.
 
-Reproduces the training split (GroupShuffleSplit, test_size=0.2, random_state=42,
-groups = (M, N, K)) and evaluates the saved model on the held-out 20%.
+The script evaluates the saved LogExe model using the exact development/holdout
+indices stored in the existing NPZ split file. It does not create a new split.
 
-Usage (from the same folder you train in):
+Run from the same directory as the final training script (default paths below):
     python evaluate_logexe_gemm.py
     python evaluate_logexe_gemm.py --threshold 12.5
-    python evaluate_logexe_gemm.py --test_csv ../datasets/t4/gemm/fresh_gemm_dataset.csv
 
-Writes a text report (default: logexe_gemm_eval_report.txt).
+Optional paths:
+    python evaluate_logexe_gemm.py \
+        --data ../datasets/t4/gemm/gemm_dataset.csv \
+        --model ./xgb_logexe_model_gemm.json \
+        --splits ./hyperparameter-tuning/gemm_group_cv_splits.npz
+
+The text report is written to logexe_gemm_eval_report.txt by default.
 """
+
 import argparse
 import os
 import platform
@@ -21,13 +26,26 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from scipy.stats import spearmanr
-from sklearn.metrics import (average_precision_score, confusion_matrix, ndcg_score,
-                             precision_recall_fscore_support, r2_score, roc_auc_score)
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.metrics import (
+    average_precision_score,
+    confusion_matrix,
+    ndcg_score,
+    r2_score,
+    roc_auc_score,
+)
 
-INVALID_LAT = 1e8       # penalty latency used in training
-VALID_CUTOFF = 1e7      # latency_ms >= this  ->  invalid config
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+INVALID_LAT = 1e8       # Penalty used by the training script for latency_ms == -1.0
+VALID_CUTOFF = 1e7      # Preserve the original evaluation script's validity rule
 LOG_INVALID = np.log(INVALID_LAT)
+
+DEFAULT_DATA_PATH = "../../datasets/t4/gemm/gemm_dataset.csv"
+DEFAULT_MODEL_PATH = "../xgb_logexe_model_gemm.json"
+DEFAULT_SPLITS_PATH = "../hyperparameter-tuning/gemm_group_cv_splits.npz"
 
 FEATURES = [
     "M", "N", "K",
@@ -40,80 +58,150 @@ FEATURES = [
     "BOUNDARY_ALIGNMENT_M", "BOUNDARY_ALIGNMENT_N",
 ]
 
-
-# ----------------------------------------------------------------------------
-# Preprocessing (identical to the training script)
-# ----------------------------------------------------------------------------
-def preprocess_data_gemm(raw_df):
-    keep_cols = ["M", "N", "K", "TILE_M", "TILE_N", "TILE_K",
-                 "THREAD_X", "THREAD_Y", "THREAD_Z", "UNROLL_FACTOR", "latency_ms"]
-    df = raw_df[keep_cols].copy()
-    df.loc[df["latency_ms"] == -1.0, "latency_ms"] = INVALID_LAT
-    df["log_latency"] = np.log(df["latency_ms"])
-
-    df["TOTAL_THREADS"] = df["THREAD_X"] * df["THREAD_Y"] * df["THREAD_Z"]
-    df["GRID_SIZE"] = np.ceil(df["M"] / df["TILE_M"]) * np.ceil(df["N"] / df["TILE_N"])
-    df["WORK_PER_THREAD_M"] = (df["TILE_M"] + df["THREAD_Y"] - 1) // df["THREAD_Y"]
-    df["WORK_PER_THREAD_N"] = (df["TILE_N"] + df["THREAD_X"] - 1) // df["THREAD_X"]
-    df["SHMEM_FOOTPRINT"] = (df["TILE_M"] * df["TILE_K"]) + (df["TILE_K"] * df["TILE_N"])
-    df["UNROLL_ALIGNMENT"] = (df["TILE_K"] % df["UNROLL_FACTOR"] == 0).astype(int)
-    df["BOUNDARY_ALIGNMENT_M"] = (df["M"] % df["TILE_M"] == 0).astype(int)
-    df["BOUNDARY_ALIGNMENT_N"] = (df["N"] % df["TILE_N"] == 0).astype(int)
-    return df
+TOP_KS = (1, 5, 10)
+NDCG_KS = (5, 10, 20)
 
 
-# ----------------------------------------------------------------------------
-# Report helper
-# ----------------------------------------------------------------------------
+# =============================================================================
+# Report helpers
+# =============================================================================
+
 LINES = []
 
 
-def out(s=""):
-    print(s)
-    LINES.append(s)
+def out(message=""):
+    print(message)
+    LINES.append(str(message))
 
 
 def header(title):
     out()
-    out("=" * 78)
+    out("=" * 82)
     out(title)
-    out("=" * 78)
+    out("=" * 82)
 
 
-# ----------------------------------------------------------------------------
+# =============================================================================
+# Preprocessing -- keep this synchronized with the final training script
+# =============================================================================
+
+
+def preprocess_data_gemm(raw_df):
+    keep_cols = [
+        "M", "N", "K",
+        "TILE_M", "TILE_N", "TILE_K",
+        "THREAD_X", "THREAD_Y", "THREAD_Z",
+        "UNROLL_FACTOR",
+        "latency_ms",
+    ]
+
+    df = raw_df[keep_cols].copy()
+
+    # Apply the same invalid-configuration penalty used during training.
+    df.loc[df["latency_ms"] == -1.0, "latency_ms"] = INVALID_LAT
+    df["log_latency"] = np.log(df["latency_ms"])
+
+    # Keep validity as an evaluation-only column (not an XGBoost feature).
+    df["is_valid"] = df["latency_ms"] < VALID_CUTOFF
+
+    # Derived features -- identical to the GEMM training script.
+    df["TOTAL_THREADS"] = (
+        df["THREAD_X"] * df["THREAD_Y"] * df["THREAD_Z"]
+    )
+
+    df["GRID_SIZE"] = (
+        np.ceil(df["M"] / df["TILE_M"]) * np.ceil(df["N"] / df["TILE_N"])
+    )
+
+    df["WORK_PER_THREAD_M"] = (
+        (df["TILE_M"] + df["THREAD_Y"] - 1) // df["THREAD_Y"]
+    )
+
+    df["WORK_PER_THREAD_N"] = (
+        (df["TILE_N"] + df["THREAD_X"] - 1) // df["THREAD_X"]
+    )
+
+    df["SHMEM_FOOTPRINT"] = (
+        (df["TILE_M"] * df["TILE_K"]) + (df["TILE_K"] * df["TILE_N"])
+    )
+
+    df["UNROLL_ALIGNMENT"] = (
+        (df["TILE_K"] % df["UNROLL_FACTOR"] == 0).astype(int)
+    )
+
+    df["BOUNDARY_ALIGNMENT_M"] = (
+        (df["M"] % df["TILE_M"] == 0).astype(int)
+    )
+
+    df["BOUNDARY_ALIGNMENT_N"] = (
+        (df["N"] % df["TILE_N"] == 0).astype(int)
+    )
+
+    return df
+
+
+# =============================================================================
 # Metric helpers
-# ----------------------------------------------------------------------------
-def reg_metrics(t_log, p_log):
-    """Regression metrics. RMSE/R2(log) in log space; RPE/MAPE/R2(ms) in real ms."""
-    t_log = np.asarray(t_log, dtype=float)
-    p_log = np.asarray(p_log, dtype=float)
-    if len(t_log) == 0:
+# =============================================================================
+
+
+def reg_metrics(true_log, pred_log):
+    """Regression metrics in log space, with relative errors in latency space.
+
+    MAPE/RPE are computed from expm1(pred_log - true_log). When invalid
+    configurations are included, their target is the synthetic 1e8 penalty;
+    combined MAPE should therefore be interpreted as a diagnostic, not as
+    ordinary measured-latency percentage error.
+    """
+    true_log = np.asarray(true_log, dtype=float)
+    pred_log = np.asarray(pred_log, dtype=float)
+
+    if len(true_log) == 0:
         return None
-    err = p_log - t_log
-    rpe = np.abs(np.expm1(err))             # |exp(p) - exp(t)| / exp(t)
-    ss_tot = np.sum((t_log - t_log.mean()) ** 2)
+
+    error = pred_log - true_log
+    with np.errstate(over="ignore", invalid="ignore"):
+        relative_error = np.abs(np.expm1(error))
+
+    r2_log = float("nan")
+    if len(true_log) >= 2 and np.ptp(true_log) > 0:
+        r2_log = float(r2_score(true_log, pred_log))
+
     return {
-        "n": len(t_log),
-        "log_rmse": float(np.sqrt(np.mean(err ** 2))),
-        "log_bias": float(err.mean()),       # >0 pessimistic, <0 optimistic
-        "median_rpe": float(np.median(rpe)),
-        "mape": float(rpe.mean()),
-        "r2_log": float(r2_score(t_log, p_log)) if ss_tot > 0 else float("nan"),
-        "r2_ms": float(r2_score(np.exp(t_log), np.exp(p_log))) if ss_tot > 0 else float("nan"),
+        "n": len(true_log),
+        "log_rmse": float(np.sqrt(np.mean(error ** 2))),
+        "log_bias": float(np.mean(error)),
+        "median_rpe": float(np.median(relative_error)),
+        "mape": float(np.mean(relative_error)),
+        "r2_log": r2_log,
     }
 
 
-def show_reg(title, m):
-    if m is None:
+def show_reg(title, metrics):
+    if metrics is None:
         out(f"{title}: no samples")
         return
-    out(f"{title}  (n = {m['n']})")
-    out(f"  Log-space RMSE          : {m['log_rmse']:.4f}")
-    out(f"  Mean log error (bias)   : {m['log_bias']:+.4f}   (negative = model optimistic)")
-    out(f"  Median RPE              : {100 * m['median_rpe']:.2f} %")
-    out(f"  MAPE                    : {100 * m['mape']:.2f} %")
-    out(f"  R^2 (log space)         : {m['r2_log']:.4f}")
-    out(f"  R^2 (real ms)           : {m['r2_ms']:.4f}")
+
+    out(f"{title} (n = {metrics['n']})")
+    out(f"  Log-space RMSE        : {metrics['log_rmse']:.4f}")
+    out(
+        f"  Mean log error (bias) : {metrics['log_bias']:+.4f}"
+        "  (negative = model optimistic)"
+    )
+    out(f"  Median RPE            : {100 * metrics['median_rpe']:.2f} %")
+    out(f"  MAPE                  : {100 * metrics['mape']:.2f} %")
+    out(f"  R^2 (log space)       : {metrics['r2_log']:.4f}")
+
+
+def show_train_test_rmse_gap(train_metrics, test_metrics, label):
+    if train_metrics is None or test_metrics is None:
+        out(f"Train/test log-RMSE gap ({label}): unavailable (no samples)")
+        return
+
+    gap = test_metrics["log_rmse"] - train_metrics["log_rmse"]
+    out(
+        f"Train/test log-RMSE gap ({label}; test - train): {gap:+.4f}"
+    )
 
 
 def safe_spearman(a, b):
@@ -124,284 +212,684 @@ def safe_spearman(a, b):
     return float(spearmanr(a, b)[0])
 
 
-def summ(vals):
-    v = np.array([x for x in vals if x is not None and not np.isnan(x)], dtype=float)
-    if len(v) == 0:
+def valid_values(values):
+    """Return finite, non-None values for aggregation."""
+    return np.asarray(
+        [value for value in values
+         if value is not None and np.isfinite(value)],
+        dtype=float,
+    )
+
+
+def summ(values):
+    values = valid_values(values)
+    if len(values) == 0:
         return "n/a (no usable groups)"
-    return (f"mean {v.mean():.4f} | median {np.median(v):.4f} | std {v.std():.4f} "
-            f"| min {v.min():.4f} | groups {len(v)}")
+
+    return (
+        f"mean {values.mean():.4f} | median {np.median(values):.4f} "
+        f"| std {values.std():.4f} | min {values.min():.4f} "
+        f"| max {values.max():.4f} | groups {len(values)}"
+    )
 
 
-def pct_summ(vals):
-    v = np.array([x for x in vals if x is not None and not np.isnan(x)], dtype=float)
-    if len(v) == 0:
-        return "n/a"
-    return (f"mean {v.mean():.4f} | median {np.median(v):.4f} | "
-            f"5th pct {np.percentile(v, 5):.4f} | min {v.min():.4f}")
+def pct_summ(values):
+    values = valid_values(values)
+    if len(values) == 0:
+        return "n/a (no usable groups)"
+
+    return (
+        f"mean {values.mean():.4f} | median {np.median(values):.4f} "
+        f"| 5th pct {np.percentile(values, 5):.4f} "
+        f"| min {values.min():.4f} | groups {len(values)}"
+    )
 
 
-def relevance_labels(lat):
+def relevance_labels(latencies):
+    """Create per-workload NDCG relevance labels.
+
+    Invalid configurations receive 0. Valid configurations receive grades
+    from 1 (slowest) to 30 (fastest), using linear gain.
     """
-    Relevance grades for NDCG (within one matrix size):
-      invalid config -> 0
-      valid configs  -> 1..30, linear in the latency rank (fastest = 30, slowest = 1)
-    Linear gain is used (matches ndcg_exp_gain=False in the rank model).
+    latencies = np.asarray(latencies, dtype=float)
+    valid = latencies < VALID_CUTOFF
+    relevance = np.zeros(len(latencies), dtype=float)
+
+    n_valid = int(valid.sum())
+    if n_valid >= 1:
+        ranks = (
+            pd.Series(latencies[valid]).rank(method="average").to_numpy() - 1.0
+        )
+        percentile_rank = ranks / max(n_valid - 1, 1)
+        relevance[valid] = 1 + np.round(29 * (1 - percentile_rank))
+
+    return relevance
+
+
+def pairwise_accuracy(latencies, ranking_scores):
+    """Fraction of unequal-latency pairs ordered correctly.
+
+    Higher ranking_scores mean better configurations. Pairs with equal true
+    latency are excluded. A predicted tie receives half credit. The loop
+    uses O(n) temporary memory rather than building an O(n^2) matrix.
     """
-    lat = np.asarray(lat, dtype=float)
-    valid = lat < VALID_CUTOFF
-    rel = np.zeros(len(lat))
-    nv = valid.sum()
-    if nv >= 1:
-        ranks = pd.Series(lat[valid]).rank(method="average").values - 1.0   # 0 = fastest
-        pct = ranks / max(nv - 1, 1)
-        rel[valid] = 1 + np.round(29 * (1 - pct))
-    return rel
+    latencies = np.asarray(latencies, dtype=float)
+    ranking_scores = np.asarray(ranking_scores, dtype=float)
+
+    n = len(latencies)
+    if n < 2:
+        return np.nan
+
+    correct = 0.0
+    comparable_pairs = 0
+
+    for i in range(n - 1):
+        true_diff = latencies[i] - latencies[i + 1:]
+        score_diff = ranking_scores[i] - ranking_scores[i + 1:]
+
+        # Equal true latencies do not define a preferred ordering.
+        not_true_tie = true_diff != 0
+        if not np.any(not_true_tie):
+            continue
+
+        true_diff = true_diff[not_true_tie]
+        score_diff = score_diff[not_true_tie]
+
+        predicted_tie = score_diff == 0
+        correctly_ordered = (
+            ((true_diff < 0) & (score_diff > 0))
+            | ((true_diff > 0) & (score_diff < 0))
+        )
+
+        correct += float(correctly_ordered.sum())
+        correct += 0.5 * float(predicted_tie.sum())
+        comparable_pairs += len(true_diff)
+
+    if comparable_pairs == 0:
+        return np.nan
+
+    return correct / comparable_pairs
 
 
-# ----------------------------------------------------------------------------
-# Timing helper
-# ----------------------------------------------------------------------------
+# =============================================================================
+# Invalid-configuration classification helpers
+# =============================================================================
+
+
+def detection_row(true_invalid, predicted_score, threshold):
+    predicted_invalid = predicted_score >= threshold
+
+    tn, fp, fn, tp = confusion_matrix(
+        true_invalid,
+        predicted_invalid,
+        labels=[False, True],
+    ).ravel()
+
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall)
+        else 0.0
+    )
+    accuracy = (tp + tn) / len(true_invalid)
+
+    return precision, recall, f1, accuracy, tp, fp, fn, tn
+
+
+# =============================================================================
+# Inference timing helper
+# =============================================================================
+
+
 def bench(fn, repeats, warmup=5):
     for _ in range(warmup):
         fn()
-    ts = []
+
+    times = []
     for _ in range(repeats):
-        t0 = time.perf_counter()
+        start = time.perf_counter()
         fn()
-        ts.append(time.perf_counter() - t0)
-    ts = np.array(ts)
-    return float(np.median(ts)), float(np.percentile(ts, 95))
+        times.append(time.perf_counter() - start)
+
+    times = np.asarray(times, dtype=float)
+    return float(np.median(times)), float(np.percentile(times, 95))
 
 
-# ----------------------------------------------------------------------------
+# =============================================================================
+# Main evaluation
+# =============================================================================
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="../../datasets/t4/gemm/gemm_dataset.csv")
-    ap.add_argument("--model", default="../xgb_logexe_model_gemm.json")
-    ap.add_argument("--out", default="logexe_gemm_eval_report.txt")
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--threshold", type=float, default=None,
-                    help="log-latency threshold above which a config is predicted invalid "
-                         "(default: midpoint between the slowest valid TRAIN config and log(1e8))")
-    ap.add_argument("--good_frac", type=float, default=0.10,
-                    help="fraction of fastest valid configs per matrix size = 'good region'")
-    ap.add_argument("--test_csv", default=None,
-                    help="optional fresh dataset (unseen matrix sizes) to evaluate on instead of the 20%% split")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(
+        description="Evaluate the GEMM XGBoost LogExe model on the saved holdout split."
+    )
+    parser.add_argument("--data", default=DEFAULT_DATA_PATH)
+    parser.add_argument("--model", default=DEFAULT_MODEL_PATH)
+    parser.add_argument("--splits", default=DEFAULT_SPLITS_PATH)
+    parser.add_argument("--out", default="logexe_gemm_eval_report.txt")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help=(
+            "Predicted log-latency threshold above which a configuration is "
+            "classified as invalid. Default: midpoint between the slowest "
+            "valid TRAIN config and log(1e8)."
+        ),
+    )
+    parser.add_argument(
+        "--good_frac",
+        type=float,
+        default=0.10,
+        help="Fraction of fastest valid configurations per matrix size used as the good region.",
+    )
+    args = parser.parse_args()
 
-    # ---------------- Load data and reproduce the split ----------------
-    df = preprocess_data_gemm(pd.read_csv(args.data))
-    df["qid"] = df.groupby(["M", "N", "K"]).ngroup()
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=args.seed)
-    tr_idx, te_idx = next(gss.split(df, groups=df["qid"]))
-    train = df.iloc[tr_idx].copy()
-    test = df.iloc[te_idx].copy()
+    if not 0 < args.good_frac <= 1:
+        parser.error("--good_frac must be greater than 0 and at most 1.")
 
-    eval_source = "20% group-held-out split of " + args.data
-    if args.test_csv:
-        test = preprocess_data_gemm(pd.read_csv(args.test_csv))
-        test["qid"] = test.groupby(["M", "N", "K"]).ngroup()
-        eval_source = "fresh dataset " + args.test_csv
+    # -------------------------------------------------------------------------
+    # Load data, preprocess, and use the EXISTING split from the NPZ file.
+    # -------------------------------------------------------------------------
+    raw_df = pd.read_csv(args.data)
+    df = preprocess_data_gemm(raw_df)
 
-    # ---------------- Load model ----------------
+    # Keep the same qid construction used by the training pipeline.
+    df["qid"] = df.groupby(["M", "N", "K"], sort=False).ngroup()
+
+    with np.load(args.splits) as splits:
+        development_indices = splits["development_indices"]
+        holdout_indices = splits["holdout_indices"]
+
+    train = df.iloc[development_indices].copy()
+    test = df.iloc[holdout_indices].copy()
+
+    # -------------------------------------------------------------------------
+    # Load model and produce predictions for development and holdout rows.
+    # -------------------------------------------------------------------------
     bst = xgb.Booster()
     bst.load_model(args.model)
-    features = bst.feature_names if bst.feature_names else FEATURES
-    missing = [f for f in features if f not in test.columns]
-    if missing:
-        raise SystemExit(f"Model expects features not in the data: {missing}")
 
-    test["pred_log"] = bst.predict(xgb.DMatrix(test[features]))
+    features = list(bst.feature_names) if bst.feature_names else FEATURES.copy()
+    missing_features = [feature for feature in features if feature not in df.columns]
+    if missing_features:
+        raise SystemExit(
+            f"Model expects features that are missing from the preprocessed data: "
+            f"{missing_features}"
+        )
+
     train["pred_log"] = bst.predict(xgb.DMatrix(train[features]))
-    for d in (train, test):
-        d["valid"] = d["latency_ms"] < VALID_CUTOFF
+    test["pred_log"] = bst.predict(xgb.DMatrix(test[features]))
 
-    # ---------------- Section 0: setup ----------------
+    train_valid = train[train["is_valid"]].copy()
+    test_valid = test[test["is_valid"]].copy()
+
+    # -------------------------------------------------------------------------
+    # Section 0: setup and sanity checks
+    # -------------------------------------------------------------------------
     header("0. SETUP AND SANITY CHECKS")
+    out(f"Dataset file        : {args.data}")
     out(f"Model file          : {args.model}")
+    out(f"Split file          : {args.splits}")
     out(f"Boosted rounds      : {bst.num_boosted_rounds()}")
-    out(f"Evaluated on        : {eval_source}")
-    out(f"Split seed          : {args.seed}")
-    out(f"Train               : {len(train)} configs, {train['qid'].nunique()} matrix sizes")
-    out(f"Test                : {len(test)} configs, {test['qid'].nunique()} matrix sizes")
-    out("  -> Compare the train/test counts above with the lines printed by your "
-        "training script;\n     if they differ, the split is NOT the same as the one used for training.")
-    train_keys = set(map(tuple, train[["M", "N", "K"]].drop_duplicates().values))
-    test_keys = set(map(tuple, test[["M", "N", "K"]].drop_duplicates().values))
-    out(f"Matrix sizes shared between train and test: {len(train_keys & test_keys)} "
-        f"(should be 0)")
-    out(f"Invalid configs     : train {100 * (~train['valid']).mean():.2f} % | "
-        f"test {100 * (~test['valid']).mean():.2f} %")
-    out(f"Valid test configs  : {int(test['valid'].sum())}")
+    out(f"XGBoost version     : {xgb.__version__}")
+    out(f"Dataset rows        : {len(df)}")
+    out(
+        f"Train               : {len(train)} configs, "
+        f"{train['qid'].nunique()} matrix sizes"
+    )
+    out(
+        f"Test                : {len(test)} configs, "
+        f"{test['qid'].nunique()} matrix sizes"
+    )
+    out(
+        "Important: NPZ indices are positional. The CSV must have exactly the "
+        "same rows in exactly the same order as when the split file was created."
+    )
 
-    tv = test[test["valid"]]
+    train_keys = set(
+        map(tuple, train[["M", "N", "K"]].drop_duplicates().to_numpy())
+    )
+    test_keys = set(
+        map(tuple, test[["M", "N", "K"]].drop_duplicates().to_numpy())
+    )
+    shared_groups = len(train_keys & test_keys)
+    out(f"Matrix sizes shared between train and test: {shared_groups} (should be 0)")
+    out(
+        f"Invalid configurations: train {100 * (~train['is_valid']).mean():.2f} % "
+        f"| test {100 * (~test['is_valid']).mean():.2f} %"
+    )
+    out(f"Valid test configurations: {len(test_valid)}")
 
-    # ---------------- Section 1: regression metrics (valid only) ----------------
-    header("1. REGRESSION METRICS - VALID CONFIGS ONLY")
-    m_test = reg_metrics(tv["log_latency"], tv["pred_log"])
-    show_reg("TEST (held-out)", m_test)
+    # -------------------------------------------------------------------------
+    # Section 1: regression metrics on valid configurations only
+    # -------------------------------------------------------------------------
+    header("1. REGRESSION METRICS -- VALID CONFIGURATIONS ONLY")
+
+    train_valid_metrics = reg_metrics(
+        train_valid["log_latency"], train_valid["pred_log"]
+    )
+    test_valid_metrics = reg_metrics(
+        test_valid["log_latency"], test_valid["pred_log"]
+    )
+
+    show_reg("TRAIN (development, in-sample)", train_valid_metrics)
     out()
-    trv = train[train["valid"]]
-    m_train = reg_metrics(trv["log_latency"], trv["pred_log"])
-    out(f"For reference, TRAIN log-RMSE (valid only): {m_train['log_rmse']:.4f}   "
-        f"-> train/test gap = {m_test['log_rmse'] - m_train['log_rmse']:+.4f}")
-    out("Note: RPE/MAPE are computed on real milliseconds (exp of predictions); "
-        "log-RMSE and R^2(log) in log space.")
+    show_reg("TEST (held-out)", test_valid_metrics)
+    out()
+    show_train_test_rmse_gap(
+        train_valid_metrics, test_valid_metrics, "valid configurations only"
+    )
+    out(
+        "Note: Log RMSE, log bias and R^2 are calculated in log space. "
+        "RPE/MAPE are relative errors after exponentiating the log-space error."
+    )
 
-    # ---------------- Section 2: good region ----------------
-    header(f"2. ACCURACY IN THE GOOD REGION (fastest {100 * args.good_frac:.0f} % valid configs per matrix size)")
-    good_mask = np.zeros(len(tv), dtype=bool)
-    tv = tv.reset_index(drop=True)
-    for _, idx in tv.groupby("qid").indices.items():
-        n_good = max(1, int(np.ceil(args.good_frac * len(idx))))
-        order = idx[np.argsort(tv["latency_ms"].values[idx], kind="stable")]
-        good_mask[order[:n_good]] = True
-    tg = tv[good_mask]
-    show_reg("TEST, good region", reg_metrics(tg["log_latency"], tg["pred_log"]))
-    out("Note: R^2 is low/negative here by construction (the true values span a narrow range); "
-        "rely on RMSE, RPE and bias.")
+    # -------------------------------------------------------------------------
+    # Section 2: regression metrics on all configurations
+    # -------------------------------------------------------------------------
+    header("2. REGRESSION METRICS -- ALL CONFIGURATIONS (VALID + INVALID)")
 
-    # ---------------- Section 3: per matrix size spread ----------------
-    header("3. ERROR SPREAD ACROSS HELD-OUT MATRIX SIZES (valid configs only)")
-    per_group = []
-    for qid, g in tv.groupby("qid"):
-        e = g["pred_log"].values - g["log_latency"].values
-        per_group.append((qid, g["M"].iloc[0], g["N"].iloc[0], g["K"].iloc[0],
-                          float(np.sqrt(np.mean(e ** 2))), len(g)))
-    rm = np.array([p[4] for p in per_group])
-    out(f"Per-size log-RMSE: mean {rm.mean():.4f} | median {np.median(rm):.4f} | "
-        f"std {rm.std():.4f} | min {rm.min():.4f} | max {rm.max():.4f}  ({len(rm)} sizes)")
-    out("Worst 5 matrix sizes (M, N, K, log-RMSE, #valid configs):")
-    for _, M, N, K, r, n in sorted(per_group, key=lambda p: -p[4])[:5]:
-        out(f"  {int(M)} x {int(N)} x {int(K)} : {r:.4f}   (n={n})")
+    train_all_metrics = reg_metrics(train["log_latency"], train["pred_log"])
+    test_all_metrics = reg_metrics(test["log_latency"], test["pred_log"])
 
-    # ---------------- Section 4: invalid detection ----------------
-    header("4. INVALID-CONFIG DETECTION (threshold on predicted log-latency)")
-    valid_train_max = trv["log_latency"].max()
-    thr = args.threshold if args.threshold is not None else (valid_train_max + LOG_INVALID) / 2
-    out(f"Slowest valid TRAIN config (log) : {valid_train_max:.3f}")
-    out(f"Invalid penalty (log)            : {LOG_INVALID:.3f}")
-    out(f"Threshold used                   : {thr:.3f}  "
-        f"({'user-given' if args.threshold is not None else 'midpoint of the two clusters, from train labels only'})")
-    inv_true = (~test["valid"]).values
-    score = test["pred_log"].values
-    if inv_true.sum() == 0 or inv_true.all():
-        out("Test set has only one class (all valid or all invalid) - detection metrics skipped.")
+    show_reg("TRAIN (development, in-sample)", train_all_metrics)
+    out()
+    show_reg("TEST (held-out)", test_all_metrics)
+    out()
+    show_train_test_rmse_gap(
+        train_all_metrics, test_all_metrics, "valid + invalid configurations"
+    )
+    out(
+        "Caution: invalid targets use the synthetic 1e8 latency penalty. "
+        "All combined metrics therefore mix latency regression with the "
+        "model's ability to reproduce the invalid-penalty target. Combined "
+        "MAPE/RPE are relative errors against that penalty, not ordinary "
+        "measured-latency percentage errors."
+    )
+
+    # -------------------------------------------------------------------------
+    # Section 3: accuracy in the good region
+    # -------------------------------------------------------------------------
+    header(
+        f"3. ACCURACY IN THE GOOD REGION "
+        f"(FASTEST {100 * args.good_frac:.0f}% VALID CONFIGS PER MATRIX SIZE)"
+    )
+
+    if len(test_valid) == 0:
+        out("No valid held-out configurations; good-region metrics are unavailable.")
     else:
-        out(f"AUC (threshold-free)             : {roc_auc_score(inv_true, score):.4f}")
-        out(f"Average precision (PR-AUC)       : {average_precision_score(inv_true, score):.4f}")
-        out()
+        good_mask = np.zeros(len(test_valid), dtype=bool)
+        test_valid_for_good = test_valid.reset_index(drop=True)
 
-        def det_row(th):
-            pred_inv = score >= th
-            p, r, f1, _ = precision_recall_fscore_support(
-                inv_true, pred_inv, average="binary", zero_division=0)
-            tn, fp, fn, tp = confusion_matrix(inv_true, pred_inv, labels=[False, True]).ravel()
-            acc = (tp + tn) / len(inv_true)
-            return p, r, f1, acc, tp, fp, fn, tn
+        for _, indices in test_valid_for_good.groupby("qid", sort=False).indices.items():
+            n_good = max(1, int(np.ceil(args.good_frac * len(indices))))
+            order = indices[
+                np.argsort(
+                    test_valid_for_good["latency_ms"].to_numpy()[indices],
+                    kind="stable",
+                )
+            ]
+            good_mask[order[:n_good]] = True
 
-        p, r, f1, acc, tp, fp, fn, tn = det_row(thr)
-        out(f"At the chosen threshold ({thr:.3f}):")
-        out(f"  Precision : {p:.4f}")
-        out(f"  Recall    : {r:.4f}   <- invalid configs that would be caught")
-        out(f"  F1        : {f1:.4f}")
-        out(f"  Accuracy  : {acc:.4f}")
-        out(f"  Confusion : TP {tp} | FP {fp} | FN {fn} | TN {tn}")
-        out(f"  FN = invalid configs predicted valid (the dangerous ones for PSO): "
-            f"{fn} of {tp + fn} ({100 * fn / max(tp + fn, 1):.2f} %)")
-        out()
-        out("Threshold sweep (sanity check on the chosen cutoff):")
-        out(f"  {'thr':>7} {'prec':>7} {'recall':>7} {'F1':>7}")
-        for th in np.linspace(valid_train_max, LOG_INVALID - 0.5, 6):
-            p_, r_, f_, *_ = det_row(th)
-            out(f"  {th:7.2f} {p_:7.4f} {r_:7.4f} {f_:7.4f}")
+        good_region = test_valid_for_good[good_mask]
+        show_reg(
+            "TEST, good region",
+            reg_metrics(good_region["log_latency"], good_region["pred_log"]),
+        )
+        out(
+            "Note: R^2 can be low or negative here because the true latency range "
+            "is deliberately narrow. RMSE, RPE, MAPE and bias are more useful."
+        )
 
-    # ---------------- Section 5: ranking metrics ----------------
-    header("5. RANKING METRICS ON THE LOG-EXE PREDICTIONS (per matrix size, then averaged)")
-    ks = [5, 10, 20]
-    sp_all, sp_val = [], []
-    ndcg_all = {k: [] for k in ks + [None]}
-    ndcg_val = {k: [] for k in ks + [None]}
-    frac_opt = {k: [] for k in (1, 5, 10)}
-    top1_invalid = []
+    # -------------------------------------------------------------------------
+    # Section 4: error spread across held-out matrix sizes
+    # -------------------------------------------------------------------------
+    header("4. ERROR SPREAD ACROSS HELD-OUT MATRIX SIZES (VALID CONFIGS ONLY)")
 
-    for qid, g in test.groupby("qid"):
-        pred = g["pred_log"].values
-        lat = g["latency_ms"].values
-        valid = lat < VALID_CUTOFF
+    per_group = []
+    for qid, group in test_valid.groupby("qid", sort=False):
+        error = group["pred_log"].to_numpy() - group["log_latency"].to_numpy()
+        group_rmse = float(np.sqrt(np.mean(error ** 2)))
+        per_group.append(
+            (
+                qid,
+                group["M"].iloc[0],
+                group["N"].iloc[0],
+                group["K"].iloc[0],
+                group_rmse,
+                len(group),
+            )
+        )
 
-        sp_all.append(safe_spearman(pred, lat))
+    if per_group:
+        group_rmse_values = np.asarray([item[4] for item in per_group], dtype=float)
+        out(
+            f"Per-size log-RMSE: mean {group_rmse_values.mean():.4f} "
+            f"| median {np.median(group_rmse_values):.4f} "
+            f"| std {group_rmse_values.std():.4f} "
+            f"| 5th pct {np.percentile(group_rmse_values, 5):.4f} "
+            f"| 95th pct {np.percentile(group_rmse_values, 95):.4f} "
+            f"| min {group_rmse_values.min():.4f} "
+            f"| max {group_rmse_values.max():.4f} "
+            f"| matrix sizes {len(per_group)}"
+        )
+        out("Worst 5 matrix sizes (M, N, K, log-RMSE, #valid configs):")
+        for _, m, n, k, rmse, n_configs in sorted(
+            per_group, key=lambda item: -item[4]
+        )[:5]:
+            out(
+                f"  {int(m)} x {int(n)} x {int(k)} : "
+                f"{rmse:.4f} (n={n_configs})"
+            )
+    else:
+        out("No valid held-out matrix sizes available for per-group error analysis.")
+
+    # -------------------------------------------------------------------------
+    # Section 5: invalid-configuration detection
+    # -------------------------------------------------------------------------
+    header("5. INVALID-CONFIGURATION DETECTION (THRESHOLD ON PREDICTED LOG-LATENCY)")
+
+    if len(train_valid) == 0:
+        out("No valid training configurations; a training-derived threshold cannot be set.")
+    else:
+        valid_train_max = float(train_valid["log_latency"].max())
+        threshold = (
+            args.threshold
+            if args.threshold is not None
+            else (valid_train_max + LOG_INVALID) / 2
+        )
+
+        out(f"Slowest valid TRAIN config (log): {valid_train_max:.3f}")
+        out(f"Invalid penalty (log)           : {LOG_INVALID:.3f}")
+        out(
+            f"Threshold used                  : {threshold:.3f} "
+            f"({'user-given' if args.threshold is not None else 'training-derived midpoint'})"
+        )
+
+        true_invalid = (~test["is_valid"]).to_numpy(dtype=bool)
+        invalid_score = test["pred_log"].to_numpy(dtype=float)
+
+        if true_invalid.sum() == 0 or true_invalid.all():
+            out(
+                "Test set has only one class (all valid or all invalid); "
+                "ROC-AUC, Average Precision and threshold metrics are skipped."
+            )
+        else:
+            out(f"ROC-AUC (threshold-free)       : {roc_auc_score(true_invalid, invalid_score):.4f}")
+            out(
+                f"Average Precision (PR-AUC)     : "
+                f"{average_precision_score(true_invalid, invalid_score):.4f}"
+            )
+            out()
+
+            precision, recall, f1, accuracy, tp, fp, fn, tn = detection_row(
+                true_invalid, invalid_score, threshold
+            )
+            out(f"At the chosen threshold ({threshold:.3f}):")
+            out(f"  Precision : {precision:.4f}")
+            out(f"  Recall    : {recall:.4f} (fraction of invalid configs caught)")
+            out(f"  F1        : {f1:.4f}")
+            out(f"  Accuracy  : {accuracy:.4f}")
+            out(f"  Confusion : TP {tp} | FP {fp} | FN {fn} | TN {tn}")
+            out(
+                f"  FN = invalid configs predicted valid: {fn} of {tp + fn} "
+                f"({100 * fn / max(tp + fn, 1):.2f} %)"
+            )
+            out()
+            out("Threshold sweep (sanity check):")
+            out(f"  {'threshold':>10} {'precision':>10} {'recall':>10} {'F1':>10}")
+
+            sweep_start = valid_train_max
+            sweep_end = LOG_INVALID - 0.5
+            if sweep_start < sweep_end:
+                for sweep_threshold in np.linspace(sweep_start, sweep_end, 6):
+                    p, r, f, _, _, _, _, _ = detection_row(
+                        true_invalid, invalid_score, float(sweep_threshold)
+                    )
+                    out(
+                        f"  {sweep_threshold:10.2f} {p:10.4f} "
+                        f"{r:10.4f} {f:10.4f}"
+                    )
+            else:
+                out("  Threshold sweep skipped: sweep start is not below sweep end.")
+
+    # -------------------------------------------------------------------------
+    # Section 6: ranking metrics on LogExe predictions
+    # -------------------------------------------------------------------------
+    header("6. RANKING METRICS ON LOG-EXE PREDICTIONS (GROUPED BY MATRIX SIZE)")
+    out(
+        "Ranking direction: lower predicted log-latency is better. "
+        "For shared ranking metrics, ranking_score = -pred_log."
+    )
+
+    spearman_all = []
+    spearman_valid = []
+    pairwise_all = []
+    pairwise_valid = []
+
+    ndcg_all = {k: [] for k in list(NDCG_KS) + [None]}
+    ndcg_valid = {k: [] for k in list(NDCG_KS) + [None]}
+
+    fraction_optimal = {k: [] for k in TOP_KS}
+    invalid_candidate_fraction = {k: [] for k in TOP_KS}
+    groups_with_invalid_in_topk = {k: [] for k in TOP_KS}
+
+    for _, group in test.groupby("qid", sort=False):
+        predicted_log = group["pred_log"].to_numpy(dtype=float)
+        ranking_scores = -predicted_log
+        latencies = group["latency_ms"].to_numpy(dtype=float)
+        valid = group["is_valid"].to_numpy(dtype=bool)
+
+        # Grouped Spearman: positive correlation means predicted and true
+        # latency increase together, so lower predictions align with lower truth.
+        spearman_all.append(safe_spearman(predicted_log, latencies))
         if valid.sum() >= 3:
-            sp_val.append(safe_spearman(pred[valid], lat[valid]))
+            spearman_valid.append(
+                safe_spearman(predicted_log[valid], latencies[valid])
+            )
 
-        rel = relevance_labels(lat)
-        if len(g) >= 2 and valid.any():
-            for k in ks + [None]:
-                ndcg_all[k].append(ndcg_score(rel[None, :], -pred[None, :], k=k))
+        # Pairwise accuracy uses a higher-is-better ranking score.
+        pairwise_all.append(pairwise_accuracy(latencies, ranking_scores))
         if valid.sum() >= 2:
-            for k in ks + [None]:
-                ndcg_val[k].append(ndcg_score(rel[valid][None, :], -pred[valid][None, :], k=k))
+            pairwise_valid.append(
+                pairwise_accuracy(latencies[valid], ranking_scores[valid])
+            )
 
-        if valid.any():
-            opt = lat[valid].min()
-            order = np.argsort(pred, kind="stable")
-            for k in frac_opt:
-                frac_opt[k].append(opt / lat[order[:k]].min())   # ~0 if top-k are all invalid
-            top1_invalid.append(float(not valid[order[0]]))
+        # NDCG: shared relevance labels for all models in future comparisons.
+        relevance = relevance_labels(latencies)
+        if len(group) >= 2 and valid.any():
+            for k in list(NDCG_KS) + [None]:
+                ndcg_all[k].append(
+                    ndcg_score(relevance[None, :], ranking_scores[None, :], k=k)
+                )
 
-    out("Spearman correlation (predicted vs true latency; lower latency = better, so + is good):")
-    out(f"  Grouped, all configs (invalid tied at 1e8) : {summ(sp_all)}")
-    out(f"  Grouped, valid configs only                : {summ(sp_val)}")
-    gs = test[["pred_log", "latency_ms"]]
-    out(f"  Pooled global, all configs                 : "
-        f"{safe_spearman(gs['pred_log'], gs['latency_ms']):.4f}")
-    out(f"  Pooled global, valid configs only          : "
-        f"{safe_spearman(tv['pred_log'], tv['latency_ms']):.4f}")
-    out("  (Pooled values mix different matrix sizes, so they partly measure 'big matrix = slow'; "
-        "the grouped numbers are the meaningful ones.)")
+        if valid.sum() >= 2:
+            valid_relevance = relevance[valid]
+            valid_scores = ranking_scores[valid]
+            for k in list(NDCG_KS) + [None]:
+                ndcg_valid[k].append(
+                    ndcg_score(
+                        valid_relevance[None, :], valid_scores[None, :], k=k
+                    )
+                )
+
+        # Top-k selection metrics are computed over all configurations. A
+        # selected invalid configuration remains in the top-k denominator.
+        order = np.argsort(predicted_log, kind="stable")
+        for k in TOP_KS:
+            selected_count = min(k, len(group))
+            selected = order[:selected_count]
+            selected_valid = valid[selected]
+
+            invalid_fraction = 1.0 - float(selected_valid.mean())
+            invalid_candidate_fraction[k].append(invalid_fraction)
+            groups_with_invalid_in_topk[k].append(
+                float(np.any(~selected_valid))
+            )
+
+            # Fraction of optimal is only defined for workloads with at least
+            # one valid configuration in the ground truth.
+            if valid.any():
+                true_optimum = float(latencies[valid].min())
+                best_selected_latency = float(latencies[selected].min())
+                fraction_optimal[k].append(
+                    true_optimum / best_selected_latency
+                )
+
+    out("Spearman correlation (predicted latency vs true latency; higher is better):")
+    out(f"  Grouped, all configs (invalid included): {summ(spearman_all)}")
+    out(f"  Grouped, valid configs only           : {summ(spearman_valid)}")
+
+    pooled_all_spearman = safe_spearman(
+        test["pred_log"].to_numpy(), test["latency_ms"].to_numpy()
+    )
+    pooled_valid_spearman = safe_spearman(
+        test_valid["pred_log"].to_numpy(), test_valid["latency_ms"].to_numpy()
+    )
+    out(f"  Pooled global, all configs (supplementary): {pooled_all_spearman:.4f}")
+    out(f"  Pooled global, valid only (supplementary)  : {pooled_valid_spearman:.4f}")
+    out(
+        "  Pooled values mix matrix sizes and can reflect the fact that larger "
+        "matrices are slower; grouped values are the primary results."
+    )
     out()
-    out("NDCG (relevance: invalid = 0, valid = 1..30 linear in latency rank within the matrix size):")
-    for label, store in (("all configs (invalid included)", ndcg_all), ("valid configs only", ndcg_val)):
+
+    out("Pairwise accuracy (unequal-latency pairs only; predicted ties receive 0.5):")
+    out(f"  Grouped, all configs (invalid included): {summ(pairwise_all)}")
+    out(f"  Grouped, valid configs only           : {summ(pairwise_valid)}")
+    out()
+
+    out(
+        "NDCG (invalid = 0; valid = 1..30 based on within-workload latency rank; "
+        "linear gain):"
+    )
+    for label, store in (
+        ("all configs (invalid included)", ndcg_all),
+        ("valid configs only", ndcg_valid),
+    ):
         out(f"  {label}:")
-        for k in ks + [None]:
-            name = "NDCG@%d" % k if k else "NDCG (full)"
-            out(f"    {name:<12}: {summ(store[k])}")
+        for k in list(NDCG_KS) + [None]:
+            metric_name = f"NDCG@{k}" if k is not None else "NDCG (full)"
+            out(f"    {metric_name:<12}: {summ(store[k])}")
     out()
-    out("Top-k fraction of optimal (best TRUE latency among the model's top-k / true optimum; 1.0 = found best):")
-    for k in frac_opt:
-        out(f"  top-{k:<2}: {pct_summ(frac_opt[k])}")
-    out(f"  Share of matrix sizes where the model's top-1 pick is an INVALID config: "
-        f"{100 * np.mean(top1_invalid):.2f} %")
 
-    # ---------------- Section 6: inference latency ----------------
-    header("6. INFERENCE LATENCY (raw XGBoost predict)")
-    out(f"xgboost {xgb.__version__} | python {platform.python_version()} | "
-        f"CPU logical cores: {os.cpu_count()} | {platform.processor() or platform.machine()}")
-    out("Booster device/threads are whatever your XGBoost default is (CPU, all cores unless set).")
+    out("Top-k fraction of optimal (1.0 = true optimum selected):")
+    out("  Formula: true workload optimum / best true latency among predicted top-k.")
+    for k in TOP_KS:
+        out(f"  Top-{k:<2}: {pct_summ(fraction_optimal[k])}")
+    out()
+
+    out("Invalid selections in the model's predicted top-k configurations:")
+    out("  Candidate fraction = mean invalid fraction among the selected top-k.")
+    out("  Workload rate      = fraction of matrix sizes with at least one invalid in top-k.")
+    for k in TOP_KS:
+        out(
+            f"  Top-{k:<2} invalid candidate fraction: "
+            f"{100 * np.mean(invalid_candidate_fraction[k]):.2f} % "
+            f"({summ(invalid_candidate_fraction[k])})"
+            if invalid_candidate_fraction[k]
+            else f"  Top-{k:<2} invalid candidate fraction: n/a"
+        )
+        out(
+            f"       workloads with >=1 invalid: "
+            f"{100 * np.mean(groups_with_invalid_in_topk[k]):.2f} % "
+            f"({summ(groups_with_invalid_in_topk[k])})"
+            if groups_with_invalid_in_topk[k]
+            else "       workloads with >=1 invalid: n/a"
+        )
+
+    # -------------------------------------------------------------------------
+    # Section 7: inference latency
+    # -------------------------------------------------------------------------
+    header("7. INFERENCE LATENCY (XGBOOST PREDICTION)")
+    out(
+        f"xgboost {xgb.__version__} | python {platform.python_version()} "
+        f"| CPU logical cores: {os.cpu_count()} "
+        f"| {platform.processor() or platform.machine()}"
+    )
+    out(
+        "Timing measures XGBoost inference and, separately, DMatrix construction "
+        "plus inference. It does not include the full PSO candidate-generation pipeline."
+    )
+
     X = test[features].to_numpy(dtype=np.float32)
-
-    dm_check = xgb.DMatrix(X[:256], feature_names=list(features))
-    diff = np.max(np.abs(bst.predict(dm_check) - test["pred_log"].values[:256]))
-    out(f"Sanity: numpy-DMatrix vs DataFrame-DMatrix predictions, max abs diff = {diff:.2e}")
+    check_count = min(256, len(X))
+    dm_check = xgb.DMatrix(X[:check_count], feature_names=list(features))
+    numpy_predictions = bst.predict(dm_check)
+    dataframe_predictions = test["pred_log"].to_numpy()[:check_count]
+    max_difference = (
+        float(np.max(np.abs(numpy_predictions - dataframe_predictions)))
+        if check_count
+        else 0.0
+    )
+    out(
+        "Sanity: NumPy-DMatrix vs DataFrame-DMatrix predictions, "
+        f"max absolute difference = {max_difference:.2e}"
+    )
     out()
-    out(f"  {'batch':>7} | {'predict only':^31} | {'DMatrix build + predict':^31}")
-    out(f"  {'':>7} | {'ms/call':>9} {'us/config':>9} {'configs/s':>10} | "
-        f"{'ms/call':>9} {'us/config':>9} {'configs/s':>10}")
-    for b in (1, 32, 128, 1024, len(X)):
-        idx = np.resize(np.arange(len(X)), b)
-        Xb = X[idx]
-        dm = xgb.DMatrix(Xb, feature_names=list(features))
-        reps = 300 if b == 1 else (100 if b <= 128 else 20)
-        t_pred, _ = bench(lambda: bst.predict(dm), reps)
-        t_full, _ = bench(lambda: bst.predict(xgb.DMatrix(Xb, feature_names=list(features))), reps)
-        out(f"  {b:>7} | {1e3 * t_pred:9.3f} {1e6 * t_pred / b:9.2f} {b / t_pred:10.0f} | "
-            f"{1e3 * t_full:9.3f} {1e6 * t_full / b:9.2f} {b / t_full:10.0f}")
-    out("Median over repeated calls after warm-up. Batch ~ PSO swarm size is the realistic case; "
-        "'DMatrix build + predict' is what a PSO loop actually pays per iteration.")
 
-    # ---------------- Write report ----------------
-    with open(args.out, "w") as f:
-        f.write("\n".join(LINES) + "\n")
+    if len(X) == 0:
+        out("No holdout configurations available; inference benchmark skipped.")
+    else:
+        batch_sizes = list(dict.fromkeys([1, 32, 128, 1024, len(X)]))
+        out(
+            f"{'batch':>7} | "
+            f"{'predict only: median / p95 ms':^31} | "
+            f"{'DMatrix + predict: median / p95 ms':^37}"
+        )
+        out(
+            f"{'':>7} | {'ms/call':>9} {'p95 ms':>9} {'us/config':>10} "
+            f"| {'ms/call':>9} {'p95 ms':>9} {'us/config':>10}"
+        )
+
+        for batch_size in batch_sizes:
+            indices = np.resize(np.arange(len(X)), batch_size)
+            batch_X = X[indices]
+            batch_dmatrix = xgb.DMatrix(
+                batch_X,
+                feature_names=list(features),
+            )
+            repeats = (
+                300 if batch_size == 1
+                else 100 if batch_size <= 128
+                else 20
+            )
+
+            predict_median, predict_p95 = bench(
+                lambda: bst.predict(batch_dmatrix), repeats
+            )
+            full_median, full_p95 = bench(
+                lambda: bst.predict(
+                    xgb.DMatrix(batch_X, feature_names=list(features))
+                ),
+                repeats,
+            )
+
+            out(
+                f"{batch_size:7d} | "
+                f"{1e3 * predict_median:9.3f} {1e3 * predict_p95:9.3f} "
+                f"{1e6 * predict_median / batch_size:10.2f} | "
+                f"{1e3 * full_median:9.3f} {1e3 * full_p95:9.3f} "
+                f"{1e6 * full_median / batch_size:10.2f}"
+            )
+
+        out(
+            "Median and 95th-percentile times are measured after warm-up. "
+            "The DMatrix + predict column includes input-matrix construction."
+        )
+
+    # -------------------------------------------------------------------------
+    # Write text report
+    # -------------------------------------------------------------------------
+    output_directory = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(output_directory, exist_ok=True)
+
+    with open(args.out, "w", encoding="utf-8") as report_file:
+        report_file.write("\n".join(LINES) + "\n")
+
     print(f"\nReport written to {args.out}")
 
 

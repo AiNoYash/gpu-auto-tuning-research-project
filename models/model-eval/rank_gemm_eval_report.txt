@@ -1,0 +1,128 @@
+
+======================================================================================
+0. SETUP AND SANITY CHECKS
+======================================================================================
+Dataset file        : ../../datasets/t4/gemm/gemm_dataset.csv
+Model file          : ../xgb_rank_model_gemm.json
+Split file          : ../hyperparameter-tuning/gemm_group_cv_splits.npz
+Boosted rounds      : 33
+XGBoost version     : 3.4.1
+Dataset rows        : 7500
+Train               : 5988 configs, 2495 workloads
+Test                : 1512 configs, 624 workloads
+Important: NPZ indices are positional. The CSV must have exactly the same rows in exactly the same order as when the split file was created.
+Workloads shared between train and test: 0 (should be 0)
+Invalid configurations: train 53.71% | test 54.10%
+Valid test configurations: 694
+Ranking direction: higher model score means a better configuration.
+
+======================================================================================
+1. SPEARMAN RANK CORRELATION
+======================================================================================
+Grouped Spearman (mean each workload equally):
+  All configurations (invalid included): mean 0.8665 | median 0.8962 | std 0.2069 | min -0.5000 | max 1.0000 | workloads 234
+  Valid configurations only           : mean 0.6784 | median 1.0000 | std 0.4783 | min -0.5000 | max 1.0000 | workloads 51
+Pooled Spearman, all configs (supplementary): 0.8510
+Pooled Spearman, valid only (supplementary): 0.4117
+Positive correlation is better. Pooled values mix workloads and can reflect differences in latency between matrix sizes; grouped values are the primary results.
+
+======================================================================================
+2. PAIRWISE ACCURACY
+======================================================================================
+Unequal-latency pairs only; predicted ties receive 0.5 credit:
+  All configurations (invalid included): mean 0.9504 | median 1.0000 | std 0.1693 | min 0.0000 | max 1.0000 | workloads 368
+  Valid configurations only           : mean 0.8310 | median 1.0000 | std 0.3376 | min 0.0000 | max 1.0000 | workloads 184
+
+======================================================================================
+3. NDCG RANKING QUALITY
+======================================================================================
+Relevance: invalid = 0; valid = 1..30 by within-workload latency rank; linear gain.
+All configurations (invalid included):
+  NDCG@5      : mean 0.9704 | median 1.0000 | std 0.0907 | min 0.6506 | max 1.0000 | workloads 368
+  NDCG@10     : mean 0.9704 | median 1.0000 | std 0.0907 | min 0.6506 | max 1.0000 | workloads 368
+  NDCG@20     : mean 0.9704 | median 1.0000 | std 0.0907 | min 0.6506 | max 1.0000 | workloads 368
+  NDCG (full) : mean 0.9704 | median 1.0000 | std 0.0907 | min 0.6506 | max 1.0000 | workloads 368
+Valid configurations only:
+  NDCG@5      : mean 0.9408 | median 1.0000 | std 0.1213 | min 0.6506 | max 1.0000 | workloads 184
+  NDCG@10     : mean 0.9408 | median 1.0000 | std 0.1213 | min 0.6506 | max 1.0000 | workloads 184
+  NDCG@20     : mean 0.9408 | median 1.0000 | std 0.1213 | min 0.6506 | max 1.0000 | workloads 184
+  NDCG (full) : mean 0.9408 | median 1.0000 | std 0.1213 | min 0.6506 | max 1.0000 | workloads 184
+
+======================================================================================
+4. TOP-K SELECTION QUALITY
+======================================================================================
+Hit rate = fraction of workloads where the exact best measured config appears in top-k.
+Regret@k = (best true latency in predicted top-k / true optimum) - 1.
+Fraction optimal@k = true optimum / best true latency in predicted top-k.
+Top-1:
+  Hit rate             : mean 91.50% | median 100.00% | std 27.89 pp | min 0.00% | max 100.00% | workloads 447
+  Regret               : mean 7.09% | median 0.00% | std 38.37 pp | min 0.00% | max 502.96% | workloads 447
+  Fraction of optimal  : mean 97.20% | median 100.00% | std 11.69 pp | min 16.58% | max 100.00% | workloads 447
+Top-5:
+  Hit rate             : mean 100.00% | median 100.00% | std 0.00 pp | min 100.00% | max 100.00% | workloads 447
+  Regret               : mean 0.00% | median 0.00% | std 0.00 pp | min 0.00% | max 0.00% | workloads 447
+  Fraction of optimal  : mean 100.00% | median 100.00% | std 0.00 pp | min 100.00% | max 100.00% | workloads 447
+Top-10:
+  Hit rate             : mean 100.00% | median 100.00% | std 0.00 pp | min 100.00% | max 100.00% | workloads 447
+  Regret               : mean 0.00% | median 0.00% | std 0.00 pp | min 0.00% | max 0.00% | workloads 447
+  Fraction of optimal  : mean 100.00% | median 100.00% | std 0.00 pp | min 100.00% | max 100.00% | workloads 447
+
+======================================================================================
+5. GOOD-REGION RETRIEVAL
+======================================================================================
+Good region = fastest 10.0% of VALID configurations within each workload. Predicted top-k is selected from all configs.
+Precision@k = good configs in predicted top-k / number selected.
+Recall@k = good configs in predicted top-k / total good configs.
+Top-1: Precision mean 91.50% | median 100.00% | std 27.89 pp | min 0.00% | max 100.00% | workloads 447
+       Recall    mean 91.50% | median 100.00% | std 27.89 pp | min 0.00% | max 100.00% | workloads 447
+Top-5: Precision mean 47.66% | median 33.33% | std 26.26 pp | min 20.00% | max 100.00% | workloads 447
+       Recall    mean 100.00% | median 100.00% | std 0.00 pp | min 100.00% | max 100.00% | workloads 447
+Top-10: Precision mean 47.55% | median 33.33% | std 26.37 pp | min 16.67% | max 100.00% | workloads 447
+       Recall    mean 100.00% | median 100.00% | std 0.00 pp | min 100.00% | max 100.00% | workloads 447
+
+======================================================================================
+6. INVALID CONFIGURATION SELECTION
+======================================================================================
+Candidate fraction = mean invalid fraction among selected top-k configs.
+Workload rate = fraction of workloads with at least one invalid in top-k.
+Top-1:
+  Invalid candidate fraction: mean 28.37% | median 0.00% | std 45.08 pp | min 0.00% | max 100.00% | workloads 624
+  Workloads with >=1 invalid: mean 28.37% | median 0.00% | std 45.08 pp | min 0.00% | max 100.00% | workloads 624
+Top-5:
+  Invalid candidate fraction: mean 53.80% | median 50.00% | std 36.76 pp | min 0.00% | max 100.00% | workloads 624
+  Workloads with >=1 invalid: mean 78.04% | median 100.00% | std 41.39 pp | min 0.00% | max 100.00% | workloads 624
+Top-10:
+  Invalid candidate fraction: mean 53.95% | median 50.00% | std 36.75 pp | min 0.00% | max 100.00% | workloads 624
+  Workloads with >=1 invalid: mean 78.04% | median 100.00% | std 41.39 pp | min 0.00% | max 100.00% | workloads 624
+
+======================================================================================
+7. PER-WORKLOAD RANKING PERFORMANCE
+======================================================================================
+NDCG@10       : mean 0.9704 | median 1.0000 | std 0.0907 | min 0.6506 | max 1.0000 | workloads 368
+Spearman      : mean 0.8665 | median 0.8962 | std 0.2069 | min -0.5000 | max 1.0000 | workloads 234
+Pairwise acc. : mean 0.9504 | median 1.0000 | std 0.1693 | min 0.0000 | max 1.0000 | workloads 368
+Regret@1      : mean 7.09% | median 0.00% | std 38.37 pp | min 0.00% | max 502.96% | workloads 447
+
+Worst 5 workloads by NDCG@10:
+(M, N, K)                     configs   NDCG@10   Spearman   Pairwise    Regret@1    Hit@5
+(1536, 384, 256)                    3    0.6506     0.5000     0.6667      50.56%        1
+(2048, 14336, 256)                  4    0.6506     0.7778     0.8000      34.20%        1
+(8192, 4096, 8192)                  4    0.6506     0.7379     0.8000      36.93%        1
+(1024, 256, 384)                    4    0.6506     0.7379     0.8000       5.48%        1
+(384, 14336, 1536)                  4    0.6506     0.7379     0.8000      19.51%        1
+
+======================================================================================
+8. INFERENCE LATENCY (XGBOOST RANKING PREDICTION)
+======================================================================================
+xgboost 3.4.1 | python 3.12.3 | CPU logical cores: 12 | x86_64
+Timing measures XGBoost inference and, separately, DMatrix construction plus inference. It does not include the full PSO candidate-generation pipeline.
+Sanity: NumPy-DMatrix vs DataFrame-DMatrix predictions, max absolute difference = 0.00e+00
+
+  batch |  predict only: median / p95 ms  |  DMatrix + predict: median / p95 ms  
+        |   ms/call    p95 ms  us/config |   ms/call    p95 ms  us/config
+      1 |     0.484     1.189     484.43 |    17.496    33.736   17496.27
+     32 |     0.511     1.990      15.97 |    30.010    37.068     937.81
+    128 |     0.503     0.618       3.93 |    30.068    47.302     234.91
+   1024 |     0.506     0.604       0.49 |    29.032    34.199      28.35
+   1512 |     0.786     0.885       0.52 |    32.790    42.521      21.69
+Median and 95th-percentile times are measured after warm-up. The DMatrix + predict column includes input-matrix construction.

@@ -3,8 +3,8 @@ import os
 import csv
 import json
 
-start_idx = 0        
-num_to_evaluate = 7500
+start_idx = 3741
+num_to_evaluate = 3759
 
 config_filename = "bmm_configurations.csv"
 dataset_filename = "bmm_tuning_dataset.csv"
