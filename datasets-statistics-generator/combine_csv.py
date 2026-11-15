@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 gpu = "t4"
-kernel = "gemm"
+kernel = "gemv"
 
 key_cols_map = {
     "gemm": ['M', 'N', 'K', 'TILE_M', 'TILE_N', 'TILE_K', 'THREAD_X', 'THREAD_Y', 'THREAD_Z', 'UNROLL_FACTOR'],

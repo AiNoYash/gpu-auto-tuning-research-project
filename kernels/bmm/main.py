@@ -3,11 +3,11 @@ import os
 import csv
 import json
 
-start_idx = 0
-num_to_evaluate = 200
+start_idx = 7077
+num_to_evaluate = 423
 
-config_filename = "bmm_group_based_configurations.csv"
-dataset_filename = "bmm_group_based_configurations_dataset_1.csv"
+config_filename = "bmm_configurations.csv"
+dataset_filename = "bmm_tuning_dataset.csv"
 
 # Read the generated configurations
 configurations = []
