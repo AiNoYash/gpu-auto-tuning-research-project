@@ -1,3 +1,23 @@
+====================================================================
+GEMV DATASET GROUP ANALYSIS
+====================================================================
+Dataset file                       : /home/yash/Desktop/RM Repo/datasets/t4/gemv/gemv_dataset.csv
+Grouping keys                     : M, K
+Invalid latency sentinel           : -1.0
+--------------------------------------------------------------------
+Total configurations              : 7,431
+Total groups                      : 224
+Valid configurations              : 6,808
+Invalid configurations            : 623
+Unclassified configurations       : 0
+--------------------------------------------------------------------
+Maximum configs in a single group : 49
+Groups containing only invalids   : 0
+Groups containing exactly 1 config: 0
+====================================================================
+
+
+
 === GEMV Dataset Statistics ===
 
 Total Rows (Pre-deduplication): 7500

@@ -1,3 +1,22 @@
+====================================================================
+BMM DATASET GROUP ANALYSIS
+====================================================================
+Dataset file                       : /home/yash/Desktop/RM Repo/datasets/t4/bmm/bmm_dataset.csv
+Grouping keys                     : BATCH_SIZE, M, N, K
+Invalid latency sentinel           : -1.0
+--------------------------------------------------------------------
+Total configurations              : 7,500
+Total groups                      : 6,780
+Valid configurations              : 2,677
+Invalid configurations            : 4,823
+Unclassified configurations       : 0
+--------------------------------------------------------------------
+Maximum configs in a single group : 4
+Groups containing only invalids   : 4,224
+Groups containing exactly 1 config: 6,105
+====================================================================
+
+
 === BMM Dataset Statistics ===
 
 Total Rows (Pre-deduplication): 11884

@@ -294,7 +294,7 @@ int main(int argc, char **argv)
     run_times.reserve(60);
 
     const int BATCH_SIZE = 20;
-    const int MAX_BATCHES = 3;
+    const int MAX_BATCHES = 1;
     double final_mean = 0.0;
     double final_variance = 0.0;
     double final_rel_variance = 0.0;

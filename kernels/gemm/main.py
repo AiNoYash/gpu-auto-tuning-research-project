@@ -3,11 +3,11 @@ import os
 import csv
 import json
 
-start_idx = 3834
-num_to_evaluate = 3666
+start_idx = 0
+num_to_evaluate = 200
 
-config_filename = "gemm_configurations.csv"
-dataset_filename = "gemm_tuning_dataset_6-15.csv"
+config_filename = "gemm_group_based_configurations.csv"
+dataset_filename = "gemm_group_based_configurations_dataset_1.csv"
 
 # Read the generated configurations
 configurations = []

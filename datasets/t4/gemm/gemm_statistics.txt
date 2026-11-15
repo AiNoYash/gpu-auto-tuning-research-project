@@ -1,3 +1,23 @@
+====================================================================
+GEMM DATASET GROUP ANALYSIS
+====================================================================
+Dataset file                       : /home/yash/Desktop/RM Repo/datasets/t4/gemm/gemm_dataset.csv
+Grouping keys                     : M, N, K
+Invalid latency sentinel           : -1.0
+--------------------------------------------------------------------
+Total configurations              : 7,500
+Total groups                      : 3,119
+Valid configurations              : 3,466
+Invalid configurations            : 4,034
+Unclassified configurations       : 0
+--------------------------------------------------------------------
+Maximum configs in a single group : 10
+Groups containing only invalids   : 905
+Groups containing exactly 1 config: 924
+====================================================================
+
+
+
 === GEMM Dataset Statistics ===
 
 Total Rows (Pre-deduplication): 7500
