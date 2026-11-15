@@ -37,10 +37,10 @@ def generate_discrete_lhs(space, num_samples):
                 
     return configurations
 
-num_samples = 7500
+num_samples = 1000
 configurations = generate_discrete_lhs(param_space, num_samples)
 
-config_filename = "bmm_configurations.csv"
+config_filename = "bmm_configurations_test.csv"
 fieldnames = list(param_space.keys())
 
 with open(config_filename, mode='w', newline='') as csvfile:
