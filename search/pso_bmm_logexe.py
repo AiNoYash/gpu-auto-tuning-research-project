@@ -94,8 +94,8 @@ INVALID_CONFIG_STATUSES = {
     "compilation_failed",
 }
 
-EXPECTED_WORKLOADS = 10
-EXPECTED_DATASET_ROWS = 2000
+EXPECTED_WORKLOADS = 9
+EXPECTED_DATASET_ROWS = 1800
 
 # Required CSV columns. THREAD_Z can be omitted because it is fixed above.
 WORKLOAD_COLUMNS = ["BATCH_SIZE", "M", "N", "K"]
