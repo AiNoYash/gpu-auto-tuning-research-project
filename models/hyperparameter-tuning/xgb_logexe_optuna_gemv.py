@@ -17,7 +17,7 @@ RANDOM_STATE = 42
 N_SPLITS = 5
 N_TRIALS = 300
 
-MAX_BOOST_ROUNDS = 500
+MAX_BOOST_ROUNDS = 1000
 EARLY_STOPPING_ROUNDS = 50
 
 # Increase final number of estimators by 10%
@@ -25,9 +25,9 @@ FINAL_ESTIMATOR_MULTIPLIER = 1.1
 
 DATASET_PATH = "../../datasets/t4/gemv/gemv_dataset.csv"
 
-PARAMS_OUTPUT = "xgb_logexe_best_params_gemv.json"
-CV_SUMMARY_OUTPUT = "xgb_logexe_cv_summary_gemv.json"
-SPLITS_OUTPUT = "gemv_group_cv_splits.npz"
+PARAMS_OUTPUT = "xgb_logexe_best_params_gemv_1000_boosting.json"
+CV_SUMMARY_OUTPUT = "xgb_logexe_cv_summary_gemv_1000_boosting.json"
+SPLITS_OUTPUT = "gemv_group_cv_splits_1000_boosting.npz"
 
 
 FEATURES = [

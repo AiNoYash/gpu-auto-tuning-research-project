@@ -15,10 +15,10 @@ RANDOM_STATE = 42
 
 DATASET_PATH = "../datasets/t4/gemv/gemv_dataset.csv"
 
-PARAMS_PATH = "./hyperparameter-tuning/xgb_logexe_best_params_gemv.json"
+PARAMS_PATH = "./hyperparameter-tuning/xgb_logexe_best_params_gemv_1000_boosting.json"
 SPLITS_PATH = "./hyperparameter-tuning/gemv_group_cv_splits.npz"
 
-MODEL_PATH = "xgb_logexe_model_gemv.json"
+MODEL_PATH = "xgb_logexe_model_gemv_1000_boosting.json"
 
 
 # ==========================================
