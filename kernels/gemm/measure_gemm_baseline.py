@@ -18,10 +18,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # User settings
 # ---------------------------------------------------------------------------
-DATASET_CSV = Path("../../datasets/t4/gemm/group_based/gemm_group_based_dataset.csv")
-CUDA_SOURCE = Path("main.cu")
-OUTPUT_CSV = Path("gemm_baseline_results.csv")
-EXECUTABLE = Path("gemm_baseline")
+SCRIPT_DIR = Path(__file__).resolve().parent
+DATASET_CSV = SCRIPT_DIR / "../../datasets/t4/gemm/group_based/gemm_group_based_dataset.csv"
+CUDA_SOURCE = SCRIPT_DIR / "main.cu"
+OUTPUT_CSV = SCRIPT_DIR / Path("gemm_baseline_results.csv")
+EXECUTABLE = SCRIPT_DIR / Path("gemm_baseline")
 
 NVCC = "nvcc"
 CUDA_ARCH = "sm_75"  # NVIDIA Tesla T4
@@ -278,21 +279,6 @@ def main():
         writer.writerows(results)
 
     print(f"\nSaved baseline results to: {OUTPUT_CSV.resolve()}")
-    print("\nCopy this dictionary into your PSO evaluation script:")
-    print("BASELINE_TIMES_MS = {")
-    for row in results:
-        if row["status"] == "success":
-            print(
-                f"    ({row['M']}, {row['N']}, {row['K']}): "
-                f"{row['latency_ms']:.10g},"
-            )
-        else:
-            print(
-                f"    ({row['M']}, {row['N']}, {row['K']}): None, "
-                f"# {row['status']}"
-            )
-    print("}")
-
     failed = sum(row["status"] != "success" for row in results)
     print(f"\nCompleted: {len(results) - failed}/{len(results)} successful baselines.")
     if failed:
