@@ -26,7 +26,7 @@ EXECUTABLE = SCRIPT_DIR / Path("bmm_baseline")
 
 NVCC = "nvcc"
 CUDA_ARCH = "sm_75"  # NVIDIA Tesla T4
-RUN_TIMEOUT_SECONDS = 120.0
+RUN_TIMEOUT_SECONDS = 300
 
 # Baseline configuration: these match the fallback defaults in the supplied
 # main.cu source. They are a reasonable, valid starting reference for T4,
