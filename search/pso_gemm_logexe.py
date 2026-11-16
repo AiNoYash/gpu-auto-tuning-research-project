@@ -21,6 +21,7 @@ import tempfile
 import time
 import warnings
 from pathlib import Path
+from shutil import which
 from typing import Any
 
 import numpy as np
@@ -114,8 +115,8 @@ REQUIRED_CSV_COLUMNS = WORKLOAD_COLUMNS + TUNABLE_PARAMETERS + ["latency_ms"]
 
 
 def resolve_path(path: Path) -> Path:
-    """Resolve a configured path against the current working directory."""
-    return path if path.is_absolute() else (Path.cwd() / path).resolve()
+    """Resolve configured paths relative to this script."""
+    return path if path.is_absolute() else (Path(__file__).resolve().parent / path).resolve()
 
 
 def as_int_column(series: pd.Series, column_name: str) -> pd.Series:
@@ -825,6 +826,11 @@ def main() -> None:
     cuda_source = resolve_path(CUDA_SOURCE)
     baseline_csv_path = resolve_path(BASELINE_RESULTS_CSV)
     output_dir = resolve_path(OUTPUT_DIR)
+    if RUN_GPU_BENCHMARK:
+        if not cuda_source.is_file():
+            raise FileNotFoundError(f"CUDA source not found: {cuda_source}")
+        if which(NVCC) is None:
+            raise FileNotFoundError(f"CUDA compiler not found: {NVCC}. Add it to PATH.")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     df = load_dataset(dataset_path)
@@ -980,8 +986,38 @@ def main() -> None:
 
     details_path = output_dir / "pso_gemm_run_details.csv"
     summary_path = output_dir / "pso_gemm_summary.csv"
+    report_path = output_dir / "pso_gemm_report.txt"
     run_df.to_csv(details_path, index=False)
     summary_df.to_csv(summary_path, index=False)
+
+    report_header = [
+        "GEMM LogExe PSO evaluation",
+        f"Workloads: {len(workloads)} | Reference rows: {len(df)} | PSO runs: {len(run_df)}",
+        f"Particles: {PARTICLE_COUNTS} | Runs per workload and size: {N_RUNS} | Iterations: {N_ITERS}",
+        f"Reference dataset: {dataset_path}",
+        f"Default latency CSV: {baseline_csv_path}",
+        f"LogExe model: {model_path}",
+        f"Distinct final configurations benchmarked: {len(benchmark_cache)}",
+        "Best seen is the minimum valid measured latency in the reference CSV for each workload.",
+        "A negative gap means PSO beat that reference. Near-optimal rates count all attempts.",
+        "Invalid-output rates use runs that returned a configuration.",
+        "CUDA median latency is measured after PSO and reused for identical workload/configuration pairs.",
+        "Tuning time excludes final CUDA benchmarking.",
+        "",
+    ]
+    report_columns = summary_df.columns.drop(
+        [*WORKLOAD_COLUMNS, "n_particles", "best_seen_config_json"]
+    )
+    with report_path.open("w", encoding="utf-8") as report:
+        report.write("\n".join(report_header) + "\n")
+        for row in summary_df.to_dict("records"):
+            report.write(f"\nWorkload ({row['M']}, {row['N']}, {row['K']}) | {row['n_particles']} particles\n")
+            for column in report_columns:
+                value = row[column]
+                display = "n/a" if pd.isna(value) else f"{value:.6g}"
+                report.write(f"  {column}: {display}\n")
+            report.write(f"  best_seen_config_json: {row['best_seen_config_json']}\n")
+        report.write(f"\nPer-run metrics and selected configurations: {details_path.name}\n")
 
     print("\n" + "=" * 78)
     print("SUMMARY")
@@ -1001,6 +1037,7 @@ def main() -> None:
     print("\nSaved:")
     print(f"  Run details: {details_path}")
     print(f"  Summary:     {summary_path}")
+    print(f"  Text report: {report_path}")
     print(f"Distinct final configurations benchmarked: {len(benchmark_cache)}")
     print("=" * 78)
 

@@ -43,13 +43,13 @@ COMPILE_TIMEOUT_SECONDS = 120.0
 RUN_TIMEOUT_SECONDS = 100.0
 
 # Fixed GEMV baseline. These use a standard 128-thread block, four rows per
-# block, a 512-element K tile, and a four-way per-thread unroll. They are reference
+# block, a 256-element K tile, and an unroll factor of two. They are reference
 # settings only; benchmark them rather than assuming they are optimal.
 BASELINE_CONFIG: dict[str, int] = {
     "BLOCK_DIM_X": 128,
     "ROWS_PER_BLOCK": 4,
-    "TILE_K": 512,
-    "UNROLL_FACTOR": 4,
+    "TILE_K": 256,
+    "UNROLL_FACTOR": 2,
 }
 
 EXPECTED_WORKLOADS = 10  # Set to None to disable the count warning.
@@ -61,8 +61,8 @@ EXPECTED_WORKLOADS = 10  # Set to None to disable the count warning.
 
 
 def resolve_path(path: Path) -> Path:
-    """Resolve relative paths from the directory where this script is run."""
-    return path if path.is_absolute() else (Path.cwd() / path).resolve()
+    """Resolve relative paths from the directory containing this script."""
+    return path if path.is_absolute() else (Path(__file__).resolve().parent / path).resolve()
 
 
 def parse_int(value: Any, column: str, row_number: int) -> int:

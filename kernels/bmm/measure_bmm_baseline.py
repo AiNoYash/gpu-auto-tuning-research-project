@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Benchmark one fixed baseline GEMM configuration on every workload in a CSV.
+"""Benchmark one fixed baseline BMM configuration on every workload in a CSV.
 
-The CSV must contain M, N, and K columns. Each unique (M, N, K) tuple is
+The CSV must contain M, N, K, and BATCH_SIZE columns. Each unique (M, N, K, BATCH_SIZE) tuple is
 benchmarked once. The CUDA executable performs its own warm-up and repeated
 kernel timing, and this script records the median_ms it prints.
 """
@@ -18,10 +18,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # User settings
 # ---------------------------------------------------------------------------
-DATASET_CSV = Path("../../datasets/t4/gemm/group_based/gemm_group_based_dataset.csv")
-CUDA_SOURCE = Path("main.cu")
-OUTPUT_CSV = Path("gemm_baseline_results.csv")
-EXECUTABLE = Path("gemm_baseline")
+SCRIPT_DIR = Path(__file__).resolve().parent
+DATASET_CSV = SCRIPT_DIR / "../../datasets/t4/bmm/group_based/bmm_group_based_dataset.csv"
+CUDA_SOURCE = SCRIPT_DIR / "main.cu"
+OUTPUT_CSV = SCRIPT_DIR / Path("bmm_baseline_results.csv")
+EXECUTABLE = SCRIPT_DIR / Path("bmm_baseline")
 
 NVCC = "nvcc"
 CUDA_ARCH = "sm_75"  # NVIDIA Tesla T4
@@ -51,7 +52,7 @@ def read_unique_workloads(csv_path: Path):
     workloads = set()
     with csv_path.open("r", newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        required = {"M", "N", "K"}
+        required = {"M", "N", "K", "BATCH_SIZE"}
         available = set(reader.fieldnames or [])
         missing = required - available
         if missing:
@@ -63,15 +64,15 @@ def read_unique_workloads(csv_path: Path):
         for row_number, row in enumerate(reader, start=2):
             try:
                 # Handles both "1024" and "1024.0" CSV representations.
-                shape = tuple(int(float(row[name])) for name in ("M", "N", "K"))
+                shape = tuple(int(float(row[name])) for name in ("M", "N", "K", "BATCH_SIZE"))
             except (TypeError, ValueError) as exc:
                 raise ValueError(
-                    f"Invalid M/N/K value at CSV row {row_number}: {row}"
+                    f"Invalid M/N/K/BATCH_SIZE value at CSV row {row_number}: {row}"
                 ) from exc
 
             if any(dimension <= 0 for dimension in shape):
                 raise ValueError(
-                    f"M, N, and K must be positive at CSV row {row_number}: {shape}"
+                    f"M, N, K, and BATCH_SIZE must be positive at CSV row {row_number}: {shape}"
                 )
             workloads.add(shape)
 
@@ -153,8 +154,8 @@ def parse_cuda_json(stdout: str):
 
 
 def benchmark_workload(executable: Path, shape):
-    m, n, k = shape
-    command = [str(executable.resolve()), str(m), str(n), str(k)]
+    m, n, k, batch_size = shape
+    command = [str(executable.resolve()), str(m), str(n), str(k), str(batch_size)]
     start = time.perf_counter()
 
     try:
@@ -238,7 +239,7 @@ def main():
     validate_baseline_config()
     workloads = read_unique_workloads(DATASET_CSV)
 
-    print(f"Found {len(workloads)} unique GEMM workloads.")
+    print(f"Found {len(workloads)} unique BMM workloads.")
     if len(workloads) != 10:
         print(
             f"WARNING: Expected 10 workloads based on your dataset description; "
@@ -249,7 +250,7 @@ def main():
     compile_baseline(CUDA_SOURCE, EXECUTABLE)
 
     output_fields = [
-        "M", "N", "K",
+        "M", "N", "K", "BATCH_SIZE",
         *BASELINE_CONFIG.keys(),
         "latency_ms", "status", "mean_ms", "variance", "rel_variance",
         "iterations", "measurement_wall_s", "error_message",
@@ -257,10 +258,10 @@ def main():
 
     results = []
     for index, shape in enumerate(workloads, start=1):
-        m, n, k = shape
-        print(f"\n[{index}/{len(workloads)}] Benchmarking M={m}, N={n}, K={k} ...")
+        m, n, k, batch_size = shape
+        print(f"\n[{index}/{len(workloads)}] Benchmarking M={m}, N={n}, K={k}, BATCH_SIZE={batch_size} ...")
         result = benchmark_workload(EXECUTABLE, shape)
-        row = {"M": m, "N": n, "K": k, **BASELINE_CONFIG, **result}
+        row = {"M": m, "N": n, "K": k, "BATCH_SIZE": batch_size, **BASELINE_CONFIG, **result}
         results.append(row)
 
         if result["status"] == "success":
@@ -278,21 +279,6 @@ def main():
         writer.writerows(results)
 
     print(f"\nSaved baseline results to: {OUTPUT_CSV.resolve()}")
-    print("\nCopy this dictionary into your PSO evaluation script:")
-    print("BASELINE_TIMES_MS = {")
-    for row in results:
-        if row["status"] == "success":
-            print(
-                f"    ({row['M']}, {row['N']}, {row['K']}): "
-                f"{row['latency_ms']:.10g},"
-            )
-        else:
-            print(
-                f"    ({row['M']}, {row['N']}, {row['K']}): None, "
-                f"# {row['status']}"
-            )
-    print("}")
-
     failed = sum(row["status"] != "success" for row in results)
     print(f"\nCompleted: {len(results) - failed}/{len(results)} successful baselines.")
     if failed:
