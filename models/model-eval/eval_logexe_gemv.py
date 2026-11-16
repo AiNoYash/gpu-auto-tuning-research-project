@@ -44,7 +44,7 @@ VALID_CUTOFF = 1e7      # Preserve the original evaluation script's validity rul
 LOG_INVALID = np.log(INVALID_LAT)
 
 DEFAULT_DATA_PATH = "../../datasets/t4/gemv/gemv_dataset.csv"
-DEFAULT_MODEL_PATH = "../xgb_logexe_model_gemv.json"
+DEFAULT_MODEL_PATH = "../xgb_logexe_model_gemv_1000_boosting.json"
 DEFAULT_SPLITS_PATH = "../hyperparameter-tuning/gemv_group_cv_splits.npz"
 
 FEATURES = [
@@ -368,7 +368,7 @@ def main():
     parser.add_argument("--data", default=DEFAULT_DATA_PATH)
     parser.add_argument("--model", default=DEFAULT_MODEL_PATH)
     parser.add_argument("--splits", default=DEFAULT_SPLITS_PATH)
-    parser.add_argument("--out", default="logexe_gemv_eval_report.txt")
+    parser.add_argument("--out", default="logexe_gemv_1000_boosting_eval_report.txt")
     parser.add_argument(
         "--threshold",
         type=float,
