@@ -1,0 +1,15 @@
+{
+  "learning_rate": 0.011350065964539635,
+  "max_depth": 10,
+  "min_child_weight": 3,
+  "subsample": 0.7812054126073701,
+  "colsample_bytree": 0.99697275457664,
+  "gamma": 0.06575239745218175,
+  "reg_alpha": 0.0005008376451644211,
+  "reg_lambda": 0.1323400747783608,
+  "objective": "reg:squarederror",
+  "eval_metric": "rmse",
+  "tree_method": "hist",
+  "seed": 42,
+  "n_estimators": 988
+}

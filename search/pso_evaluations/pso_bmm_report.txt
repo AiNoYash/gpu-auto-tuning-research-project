@@ -1,0 +1,1023 @@
+BMM LogExe PSO evaluation
+Workloads: 9 | Reference rows: 1800 | PSO runs: 900
+Particles: [10, 30, 50, 100] | Runs per workload and size: 25 | Iterations: 50
+Reference dataset: /content/gpu-auto-tuning-research-project/datasets/t4/bmm/group_based/bmm_group_based_dataset.csv
+Default latency CSV: /content/gpu-auto-tuning-research-project/datasets/t4/bmm/group_based/bmm_baseline_results.csv
+LogExe model: /content/gpu-auto-tuning-research-project/models/xgb_logexe_model_bmm.json
+Distinct final configurations benchmarked: 295
+Best seen is the minimum valid measured latency in the reference CSV for each workload.
+A negative gap means PSO beat that reference. Near-optimal rates count all attempts.
+Invalid-output rates use runs that returned a configuration.
+CUDA median latency is measured after PSO and reused for identical workload/configuration pairs.
+Tuning time excludes final CUDA benchmarking.
+
+
+Workload (1, 768, 384, 32) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.05472
+  baseline_ms: 0.054048
+  mean_actual_latency_ms: 0.106084
+  median_actual_latency_ms: 0.105888
+  mean_speedup_vs_baseline: 0.548602
+  median_speedup_vs_baseline: 0.510426
+  mean_speedup_vs_best_seen: 0.555423
+  median_speedup_vs_best_seen: 0.516772
+  mean_optimal_gap_pct: 93.8678
+  median_optimal_gap_pct: 93.5088
+  mean_tuning_time_s: 0.715579
+  median_tuning_time_s: 0.651089
+  mean_xgb_inference_time_s: 0.259103
+  median_xgb_inference_time_s: 0.222896
+  mean_non_inference_overhead_s: 0.456476
+  median_non_inference_overhead_s: 0.426852
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 4
+  best_seen_config_json: {"TILE_M": 4, "TILE_N": 64, "TILE_K": 32, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 64, "THREAD_Z": 1}
+
+Workload (1, 768, 384, 32) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.05472
+  baseline_ms: 0.054048
+  mean_actual_latency_ms: 0.0904941
+  median_actual_latency_ms: 0.079184
+  mean_speedup_vs_baseline: 0.630193
+  median_speedup_vs_baseline: 0.682562
+  mean_speedup_vs_best_seen: 0.638028
+  median_speedup_vs_best_seen: 0.691049
+  mean_optimal_gap_pct: 65.3766
+  median_optimal_gap_pct: 44.7076
+  mean_tuning_time_s: 0.853901
+  median_tuning_time_s: 0.735073
+  mean_xgb_inference_time_s: 0.302396
+  median_xgb_inference_time_s: 0.244823
+  mean_non_inference_overhead_s: 0.551505
+  median_non_inference_overhead_s: 0.490569
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 4
+  near_optimal_10pct_success_rate_pct: 8
+  best_seen_config_json: {"TILE_M": 4, "TILE_N": 64, "TILE_K": 32, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 64, "THREAD_Z": 1}
+
+Workload (1, 768, 384, 32) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.05472
+  baseline_ms: 0.054048
+  mean_actual_latency_ms: 0.0779469
+  median_actual_latency_ms: 0.078256
+  mean_speedup_vs_baseline: 0.708807
+  median_speedup_vs_baseline: 0.690656
+  mean_speedup_vs_best_seen: 0.71762
+  median_speedup_vs_best_seen: 0.699244
+  mean_optimal_gap_pct: 42.4468
+  median_optimal_gap_pct: 43.0117
+  mean_tuning_time_s: 0.862093
+  median_tuning_time_s: 0.802246
+  mean_xgb_inference_time_s: 0.28532
+  median_xgb_inference_time_s: 0.259556
+  mean_non_inference_overhead_s: 0.576773
+  median_non_inference_overhead_s: 0.543187
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 12
+  near_optimal_10pct_success_rate_pct: 12
+  best_seen_config_json: {"TILE_M": 4, "TILE_N": 64, "TILE_K": 32, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 64, "THREAD_Z": 1}
+
+Workload (1, 768, 384, 32) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.05472
+  baseline_ms: 0.054048
+  mean_actual_latency_ms: 0.0781126
+  median_actual_latency_ms: 0.078256
+  mean_speedup_vs_baseline: 0.692034
+  median_speedup_vs_baseline: 0.690656
+  mean_speedup_vs_best_seen: 0.700639
+  median_speedup_vs_best_seen: 0.699244
+  mean_optimal_gap_pct: 42.7497
+  median_optimal_gap_pct: 43.0117
+  mean_tuning_time_s: 1.11546
+  median_tuning_time_s: 0.973446
+  mean_xgb_inference_time_s: 0.33612
+  median_xgb_inference_time_s: 0.28141
+  mean_non_inference_overhead_s: 0.779343
+  median_non_inference_overhead_s: 0.694386
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 4, "TILE_N": 64, "TILE_K": 32, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 64, "THREAD_Z": 1}
+
+Workload (2, 1536, 512, 8192) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 38.5451
+  baseline_ms: 54.0881
+  mean_actual_latency_ms: 43.8921
+  median_actual_latency_ms: 45.3037
+  mean_speedup_vs_baseline: 1.25789
+  median_speedup_vs_baseline: 1.1939
+  mean_speedup_vs_best_seen: 0.896416
+  median_speedup_vs_best_seen: 0.850816
+  mean_optimal_gap_pct: 13.8721
+  median_optimal_gap_pct: 17.5343
+  mean_tuning_time_s: 0.751723
+  median_tuning_time_s: 0.654932
+  mean_xgb_inference_time_s: 0.272243
+  median_xgb_inference_time_s: 0.224258
+  mean_non_inference_overhead_s: 0.47948
+  median_non_inference_overhead_s: 0.429351
+  near_optimal_1pct_success_rate_pct: 28
+  near_optimal_5pct_success_rate_pct: 28
+  near_optimal_10pct_success_rate_pct: 28
+  best_seen_config_json: {"TILE_M": 256, "TILE_N": 96, "TILE_K": 32, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (2, 1536, 512, 8192) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 38.5451
+  baseline_ms: 54.0881
+  mean_actual_latency_ms: 42.2003
+  median_actual_latency_ms: 46.2146
+  mean_speedup_vs_baseline: 1.31853
+  median_speedup_vs_baseline: 1.17037
+  mean_speedup_vs_best_seen: 0.939634
+  median_speedup_vs_best_seen: 0.834046
+  mean_optimal_gap_pct: 9.4828
+  median_optimal_gap_pct: 19.8975
+  mean_tuning_time_s: 0.836918
+  median_tuning_time_s: 0.730645
+  mean_xgb_inference_time_s: 0.293095
+  median_xgb_inference_time_s: 0.241091
+  mean_non_inference_overhead_s: 0.543822
+  median_non_inference_overhead_s: 0.486266
+  near_optimal_1pct_success_rate_pct: 36
+  near_optimal_5pct_success_rate_pct: 36
+  near_optimal_10pct_success_rate_pct: 36
+  best_seen_config_json: {"TILE_M": 256, "TILE_N": 96, "TILE_K": 32, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (2, 1536, 512, 8192) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 38.5451
+  baseline_ms: 54.0881
+  mean_actual_latency_ms: 42.0865
+  median_actual_latency_ms: 46.2146
+  mean_speedup_vs_baseline: 1.32217
+  median_speedup_vs_baseline: 1.17037
+  mean_speedup_vs_best_seen: 0.942223
+  median_speedup_vs_best_seen: 0.834046
+  mean_optimal_gap_pct: 9.18762
+  median_optimal_gap_pct: 19.8975
+  mean_tuning_time_s: 0.873908
+  median_tuning_time_s: 0.808225
+  mean_xgb_inference_time_s: 0.291057
+  median_xgb_inference_time_s: 0.262396
+  mean_non_inference_overhead_s: 0.582852
+  median_non_inference_overhead_s: 0.549086
+  near_optimal_1pct_success_rate_pct: 36
+  near_optimal_5pct_success_rate_pct: 36
+  near_optimal_10pct_success_rate_pct: 36
+  best_seen_config_json: {"TILE_M": 256, "TILE_N": 96, "TILE_K": 32, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (2, 1536, 512, 8192) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 38.5451
+  baseline_ms: 54.0881
+  mean_actual_latency_ms: 37.8992
+  median_actual_latency_ms: 33.3073
+  mean_speedup_vs_baseline: 1.46209
+  median_speedup_vs_baseline: 1.62391
+  mean_speedup_vs_best_seen: 1.04193
+  median_speedup_vs_best_seen: 1.15726
+  mean_optimal_gap_pct: -1.67567
+  median_optimal_gap_pct: -13.5888
+  mean_tuning_time_s: 1.10652
+  median_tuning_time_s: 0.979991
+  mean_xgb_inference_time_s: 0.331137
+  median_xgb_inference_time_s: 0.284037
+  mean_non_inference_overhead_s: 0.775388
+  median_non_inference_overhead_s: 0.697351
+  near_optimal_1pct_success_rate_pct: 64
+  near_optimal_5pct_success_rate_pct: 64
+  near_optimal_10pct_success_rate_pct: 64
+  best_seen_config_json: {"TILE_M": 256, "TILE_N": 96, "TILE_K": 32, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (2, 5120, 14336, 3072) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 1277.69
+  baseline_ms: 1819.17
+  mean_actual_latency_ms: 1664.08
+  median_actual_latency_ms: 1641.08
+  mean_speedup_vs_baseline: 1.14785
+  median_speedup_vs_baseline: 1.10852
+  mean_speedup_vs_best_seen: 0.80619
+  median_speedup_vs_best_seen: 0.778567
+  mean_optimal_gap_pct: 30.2411
+  median_optimal_gap_pct: 28.4412
+  mean_tuning_time_s: 0.765506
+  median_tuning_time_s: 0.658788
+  mean_xgb_inference_time_s: 0.282054
+  median_xgb_inference_time_s: 0.226664
+  mean_non_inference_overhead_s: 0.483452
+  median_non_inference_overhead_s: 0.430391
+  near_optimal_1pct_success_rate_pct: 24
+  near_optimal_5pct_success_rate_pct: 24
+  near_optimal_10pct_success_rate_pct: 24
+  best_seen_config_json: {"TILE_M": 128, "TILE_N": 32, "TILE_K": 64, "THREAD_X": 32, "THREAD_Y": 16, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (2, 5120, 14336, 3072) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 1277.69
+  baseline_ms: 1819.17
+  mean_actual_latency_ms: 1611.62
+  median_actual_latency_ms: 1625.51
+  mean_speedup_vs_baseline: 1.18268
+  median_speedup_vs_baseline: 1.11914
+  mean_speedup_vs_best_seen: 0.830653
+  median_speedup_vs_best_seen: 0.786024
+  mean_optimal_gap_pct: 26.1352
+  median_optimal_gap_pct: 27.2226
+  mean_tuning_time_s: 0.847068
+  median_tuning_time_s: 0.722245
+  mean_xgb_inference_time_s: 0.298532
+  median_xgb_inference_time_s: 0.240541
+  mean_non_inference_overhead_s: 0.548535
+  median_non_inference_overhead_s: 0.484377
+  near_optimal_1pct_success_rate_pct: 32
+  near_optimal_5pct_success_rate_pct: 32
+  near_optimal_10pct_success_rate_pct: 32
+  best_seen_config_json: {"TILE_M": 128, "TILE_N": 32, "TILE_K": 64, "THREAD_X": 32, "THREAD_Y": 16, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (2, 5120, 14336, 3072) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 1277.69
+  baseline_ms: 1819.17
+  mean_actual_latency_ms: 1556.15
+  median_actual_latency_ms: 1595.39
+  mean_speedup_vs_baseline: 1.19518
+  median_speedup_vs_baseline: 1.14027
+  mean_speedup_vs_best_seen: 0.839431
+  median_speedup_vs_best_seen: 0.800864
+  mean_optimal_gap_pct: 21.7944
+  median_optimal_gap_pct: 24.8652
+  mean_tuning_time_s: 0.865742
+  median_tuning_time_s: 0.803255
+  mean_xgb_inference_time_s: 0.286814
+  median_xgb_inference_time_s: 0.260752
+  mean_non_inference_overhead_s: 0.578928
+  median_non_inference_overhead_s: 0.545048
+  near_optimal_1pct_success_rate_pct: 20
+  near_optimal_5pct_success_rate_pct: 20
+  near_optimal_10pct_success_rate_pct: 20
+  best_seen_config_json: {"TILE_M": 128, "TILE_N": 32, "TILE_K": 64, "THREAD_X": 32, "THREAD_Y": 16, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (2, 5120, 14336, 3072) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 1277.69
+  baseline_ms: 1819.17
+  mean_actual_latency_ms: 1538.63
+  median_actual_latency_ms: 1641.08
+  mean_speedup_vs_baseline: 1.20415
+  median_speedup_vs_baseline: 1.10852
+  mean_speedup_vs_best_seen: 0.845735
+  median_speedup_vs_best_seen: 0.778567
+  mean_optimal_gap_pct: 20.4225
+  median_optimal_gap_pct: 28.4412
+  mean_tuning_time_s: 1.12436
+  median_tuning_time_s: 0.984042
+  mean_xgb_inference_time_s: 0.341435
+  median_xgb_inference_time_s: 0.288219
+  mean_non_inference_overhead_s: 0.782927
+  median_non_inference_overhead_s: 0.6964
+  near_optimal_1pct_success_rate_pct: 16
+  near_optimal_5pct_success_rate_pct: 16
+  near_optimal_10pct_success_rate_pct: 16
+  best_seen_config_json: {"TILE_M": 128, "TILE_N": 32, "TILE_K": 64, "THREAD_X": 32, "THREAD_Y": 16, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (4, 16, 1536, 64) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.058592
+  baseline_ms: 0.116768
+  mean_actual_latency_ms: 0.0815174
+  median_actual_latency_ms: 0.074912
+  mean_speedup_vs_baseline: 1.54641
+  median_speedup_vs_baseline: 1.55874
+  mean_speedup_vs_best_seen: 0.775962
+  median_speedup_vs_best_seen: 0.782144
+  mean_optimal_gap_pct: 39.1273
+  median_optimal_gap_pct: 27.8536
+  mean_tuning_time_s: 0.73548
+  median_tuning_time_s: 0.650104
+  mean_xgb_inference_time_s: 0.267918
+  median_xgb_inference_time_s: 0.223895
+  mean_non_inference_overhead_s: 0.467562
+  median_non_inference_overhead_s: 0.428602
+  near_optimal_1pct_success_rate_pct: 12
+  near_optimal_5pct_success_rate_pct: 12
+  near_optimal_10pct_success_rate_pct: 16
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 128, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 4, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (4, 16, 1536, 64) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.058592
+  baseline_ms: 0.116768
+  mean_actual_latency_ms: 0.0783552
+  median_actual_latency_ms: 0.075488
+  mean_speedup_vs_baseline: 1.50119
+  median_speedup_vs_baseline: 1.54684
+  mean_speedup_vs_best_seen: 0.753271
+  median_speedup_vs_best_seen: 0.776176
+  mean_optimal_gap_pct: 33.7302
+  median_optimal_gap_pct: 28.8367
+  mean_tuning_time_s: 0.831755
+  median_tuning_time_s: 0.72345
+  mean_xgb_inference_time_s: 0.291596
+  median_xgb_inference_time_s: 0.240353
+  mean_non_inference_overhead_s: 0.54016
+  median_non_inference_overhead_s: 0.484553
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 128, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 4, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (4, 16, 1536, 64) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.058592
+  baseline_ms: 0.116768
+  mean_actual_latency_ms: 0.076336
+  median_actual_latency_ms: 0.074912
+  mean_speedup_vs_baseline: 1.54028
+  median_speedup_vs_baseline: 1.55874
+  mean_speedup_vs_best_seen: 0.772882
+  median_speedup_vs_best_seen: 0.782144
+  mean_optimal_gap_pct: 30.284
+  median_optimal_gap_pct: 27.8536
+  mean_tuning_time_s: 0.868571
+  median_tuning_time_s: 0.80869
+  mean_xgb_inference_time_s: 0.287673
+  median_xgb_inference_time_s: 0.260321
+  mean_non_inference_overhead_s: 0.580898
+  median_non_inference_overhead_s: 0.545638
+  near_optimal_1pct_success_rate_pct: 4
+  near_optimal_5pct_success_rate_pct: 4
+  near_optimal_10pct_success_rate_pct: 4
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 128, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 4, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (4, 16, 1536, 64) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.058592
+  baseline_ms: 0.116768
+  mean_actual_latency_ms: 0.0754893
+  median_actual_latency_ms: 0.074912
+  mean_speedup_vs_baseline: 1.548
+  median_speedup_vs_baseline: 1.55874
+  mean_speedup_vs_best_seen: 0.776755
+  median_speedup_vs_best_seen: 0.782144
+  mean_optimal_gap_pct: 28.8389
+  median_optimal_gap_pct: 27.8536
+  mean_tuning_time_s: 1.11124
+  median_tuning_time_s: 0.966022
+  mean_xgb_inference_time_s: 0.332504
+  median_xgb_inference_time_s: 0.278306
+  mean_non_inference_overhead_s: 0.778735
+  median_non_inference_overhead_s: 0.686133
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 128, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 4, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (4, 1024, 5120, 64) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 3.64672
+  baseline_ms: 5.5029
+  mean_actual_latency_ms: 6.99749
+  median_actual_latency_ms: 6.76718
+  mean_speedup_vs_baseline: 0.828413
+  median_speedup_vs_baseline: 0.813175
+  mean_speedup_vs_best_seen: 0.548981
+  median_speedup_vs_best_seen: 0.538883
+  mean_optimal_gap_pct: 91.8845
+  median_optimal_gap_pct: 85.5689
+  mean_tuning_time_s: 0.748178
+  median_tuning_time_s: 0.640863
+  mean_xgb_inference_time_s: 0.274864
+  median_xgb_inference_time_s: 0.220765
+  mean_non_inference_overhead_s: 0.473314
+  median_non_inference_overhead_s: 0.421073
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 32, "TILE_N": 96, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (4, 1024, 5120, 64) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 3.64672
+  baseline_ms: 5.5029
+  mean_actual_latency_ms: 5.92319
+  median_actual_latency_ms: 5.5845
+  mean_speedup_vs_baseline: 0.964186
+  median_speedup_vs_baseline: 0.985388
+  mean_speedup_vs_best_seen: 0.638957
+  median_speedup_vs_best_seen: 0.653007
+  mean_optimal_gap_pct: 62.4252
+  median_optimal_gap_pct: 53.1376
+  mean_tuning_time_s: 0.816067
+  median_tuning_time_s: 0.726369
+  mean_xgb_inference_time_s: 0.282825
+  median_xgb_inference_time_s: 0.243141
+  mean_non_inference_overhead_s: 0.533242
+  median_non_inference_overhead_s: 0.486466
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 32, "TILE_N": 96, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (4, 1024, 5120, 64) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 3.64672
+  baseline_ms: 5.5029
+  mean_actual_latency_ms: 5.49651
+  median_actual_latency_ms: 4.89386
+  mean_speedup_vs_baseline: 1.02415
+  median_speedup_vs_baseline: 1.12445
+  mean_speedup_vs_best_seen: 0.678698
+  median_speedup_vs_best_seen: 0.745162
+  mean_optimal_gap_pct: 50.7248
+  median_optimal_gap_pct: 34.199
+  mean_tuning_time_s: 0.892996
+  median_tuning_time_s: 0.80142
+  mean_xgb_inference_time_s: 0.299043
+  median_xgb_inference_time_s: 0.259987
+  mean_non_inference_overhead_s: 0.593953
+  median_non_inference_overhead_s: 0.541726
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 32, "TILE_N": 96, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (4, 1024, 5120, 64) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 3.64672
+  baseline_ms: 5.5029
+  mean_actual_latency_ms: 4.91427
+  median_actual_latency_ms: 4.89386
+  mean_speedup_vs_baseline: 1.12081
+  median_speedup_vs_baseline: 1.12445
+  mean_speedup_vs_best_seen: 0.742749
+  median_speedup_vs_best_seen: 0.745162
+  mean_optimal_gap_pct: 34.7586
+  median_optimal_gap_pct: 34.199
+  mean_tuning_time_s: 1.08799
+  median_tuning_time_s: 0.9781
+  mean_xgb_inference_time_s: 0.324478
+  median_xgb_inference_time_s: 0.282453
+  mean_non_inference_overhead_s: 0.763508
+  median_non_inference_overhead_s: 0.695445
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 32, "TILE_N": 96, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (16, 32, 256, 4096) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 2.81733
+  baseline_ms: 5.49675
+  mean_actual_latency_ms: 4.84636
+  median_actual_latency_ms: 4.18861
+  mean_speedup_vs_baseline: 1.27328
+  median_speedup_vs_baseline: 1.31231
+  mean_speedup_vs_best_seen: 0.652612
+  median_speedup_vs_best_seen: 0.672617
+  mean_optimal_gap_pct: 72.0197
+  median_optimal_gap_pct: 48.673
+  mean_tuning_time_s: 0.780744
+  median_tuning_time_s: 0.660251
+  mean_xgb_inference_time_s: 0.287899
+  median_xgb_inference_time_s: 0.226147
+  mean_non_inference_overhead_s: 0.492845
+  median_non_inference_overhead_s: 0.434773
+  near_optimal_1pct_success_rate_pct: 4
+  near_optimal_5pct_success_rate_pct: 16
+  near_optimal_10pct_success_rate_pct: 20
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 32, "TILE_K": 4, "THREAD_X": 16, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (16, 32, 256, 4096) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 2.81733
+  baseline_ms: 5.49675
+  mean_actual_latency_ms: 4.97488
+  median_actual_latency_ms: 5.58318
+  mean_speedup_vs_baseline: 1.23093
+  median_speedup_vs_baseline: 0.98452
+  mean_speedup_vs_best_seen: 0.630906
+  median_speedup_vs_best_seen: 0.50461
+  mean_optimal_gap_pct: 76.5815
+  median_optimal_gap_pct: 98.1727
+  mean_tuning_time_s: 0.798801
+  median_tuning_time_s: 0.728241
+  mean_xgb_inference_time_s: 0.274512
+  median_xgb_inference_time_s: 0.241212
+  mean_non_inference_overhead_s: 0.524288
+  median_non_inference_overhead_s: 0.483107
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 20
+  near_optimal_10pct_success_rate_pct: 20
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 32, "TILE_K": 4, "THREAD_X": 16, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (16, 32, 256, 4096) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 2.81733
+  baseline_ms: 5.49675
+  mean_actual_latency_ms: 5.06555
+  median_actual_latency_ms: 5.82376
+  mean_speedup_vs_baseline: 1.26634
+  median_speedup_vs_baseline: 0.943849
+  mean_speedup_vs_best_seen: 0.649054
+  median_speedup_vs_best_seen: 0.483765
+  mean_optimal_gap_pct: 79.7995
+  median_optimal_gap_pct: 106.712
+  mean_tuning_time_s: 0.931939
+  median_tuning_time_s: 0.817481
+  mean_xgb_inference_time_s: 0.312461
+  median_xgb_inference_time_s: 0.266535
+  mean_non_inference_overhead_s: 0.619478
+  median_non_inference_overhead_s: 0.55278
+  near_optimal_1pct_success_rate_pct: 8
+  near_optimal_5pct_success_rate_pct: 36
+  near_optimal_10pct_success_rate_pct: 36
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 32, "TILE_K": 4, "THREAD_X": 16, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (16, 32, 256, 4096) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 2.81733
+  baseline_ms: 5.49675
+  mean_actual_latency_ms: 4.56345
+  median_actual_latency_ms: 4.8953
+  mean_speedup_vs_baseline: 1.38181
+  median_speedup_vs_baseline: 1.12286
+  mean_speedup_vs_best_seen: 0.708237
+  median_speedup_vs_best_seen: 0.575517
+  mean_optimal_gap_pct: 61.9779
+  median_optimal_gap_pct: 73.7567
+  mean_tuning_time_s: 1.1064
+  median_tuning_time_s: 0.978733
+  mean_xgb_inference_time_s: 0.330256
+  median_xgb_inference_time_s: 0.284839
+  mean_non_inference_overhead_s: 0.776143
+  median_non_inference_overhead_s: 0.699118
+  near_optimal_1pct_success_rate_pct: 8
+  near_optimal_5pct_success_rate_pct: 44
+  near_optimal_10pct_success_rate_pct: 44
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 32, "TILE_K": 4, "THREAD_X": 16, "THREAD_Y": 8, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (16, 768, 2048, 384) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 25.3432
+  baseline_ms: 38.7738
+  mean_actual_latency_ms: 29.1904
+  median_actual_latency_ms: 27.1418
+  mean_speedup_vs_baseline: 1.36969
+  median_speedup_vs_baseline: 1.42856
+  mean_speedup_vs_best_seen: 0.895252
+  median_speedup_vs_best_seen: 0.933733
+  mean_optimal_gap_pct: 15.1804
+  median_optimal_gap_pct: 7.09697
+  mean_tuning_time_s: 0.793484
+  median_tuning_time_s: 0.669432
+  mean_xgb_inference_time_s: 0.292455
+  median_xgb_inference_time_s: 0.232058
+  mean_non_inference_overhead_s: 0.50103
+  median_non_inference_overhead_s: 0.439514
+  near_optimal_1pct_success_rate_pct: 32
+  near_optimal_5pct_success_rate_pct: 44
+  near_optimal_10pct_success_rate_pct: 56
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 256, "TILE_K": 32, "THREAD_X": 256, "THREAD_Y": 2, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (16, 768, 2048, 384) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 25.3432
+  baseline_ms: 38.7738
+  mean_actual_latency_ms: 26.4898
+  median_actual_latency_ms: 24.9993
+  mean_speedup_vs_baseline: 1.48014
+  median_speedup_vs_baseline: 1.551
+  mean_speedup_vs_best_seen: 0.967446
+  median_speedup_vs_best_seen: 1.01376
+  mean_optimal_gap_pct: 4.52429
+  median_optimal_gap_pct: -1.35697
+  mean_tuning_time_s: 0.862166
+  median_tuning_time_s: 0.75176
+  mean_xgb_inference_time_s: 0.30105
+  median_xgb_inference_time_s: 0.250082
+  mean_non_inference_overhead_s: 0.561116
+  median_non_inference_overhead_s: 0.502528
+  near_optimal_1pct_success_rate_pct: 72
+  near_optimal_5pct_success_rate_pct: 76
+  near_optimal_10pct_success_rate_pct: 76
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 256, "TILE_K": 32, "THREAD_X": 256, "THREAD_Y": 2, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (16, 768, 2048, 384) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 25.3432
+  baseline_ms: 38.7738
+  mean_actual_latency_ms: 26.2111
+  median_actual_latency_ms: 24.8041
+  mean_speedup_vs_baseline: 1.49424
+  median_speedup_vs_baseline: 1.5632
+  mean_speedup_vs_best_seen: 0.976661
+  median_speedup_vs_best_seen: 1.02173
+  mean_optimal_gap_pct: 3.42471
+  median_optimal_gap_pct: -2.1272
+  mean_tuning_time_s: 0.90593
+  median_tuning_time_s: 0.822374
+  mean_xgb_inference_time_s: 0.30098
+  median_xgb_inference_time_s: 0.265033
+  mean_non_inference_overhead_s: 0.60495
+  median_non_inference_overhead_s: 0.557937
+  near_optimal_1pct_success_rate_pct: 76
+  near_optimal_5pct_success_rate_pct: 80
+  near_optimal_10pct_success_rate_pct: 80
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 256, "TILE_K": 32, "THREAD_X": 256, "THREAD_Y": 2, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (16, 768, 2048, 384) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 25.3432
+  baseline_ms: 38.7738
+  mean_actual_latency_ms: 25.5801
+  median_actual_latency_ms: 24.8041
+  mean_speedup_vs_baseline: 1.52331
+  median_speedup_vs_baseline: 1.5632
+  mean_speedup_vs_best_seen: 0.99566
+  median_speedup_vs_best_seen: 1.02173
+  mean_optimal_gap_pct: 0.934862
+  median_optimal_gap_pct: -2.1272
+  mean_tuning_time_s: 1.12865
+  median_tuning_time_s: 0.990317
+  mean_xgb_inference_time_s: 0.339567
+  median_xgb_inference_time_s: 0.28837
+  mean_non_inference_overhead_s: 0.789085
+  median_non_inference_overhead_s: 0.70188
+  near_optimal_1pct_success_rate_pct: 84
+  near_optimal_5pct_success_rate_pct: 84
+  near_optimal_10pct_success_rate_pct: 84
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 256, "TILE_K": 32, "THREAD_X": 256, "THREAD_Y": 2, "UNROLL_FACTOR": 2, "THREAD_Z": 1}
+
+Workload (32, 16, 768, 512) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.921136
+  baseline_ms: 5.43352
+  mean_actual_latency_ms: 1.77079
+  median_actual_latency_ms: 1.79616
+  mean_speedup_vs_baseline: 3.41288
+  median_speedup_vs_baseline: 3.02508
+  mean_speedup_vs_best_seen: 0.57858
+  median_speedup_vs_best_seen: 0.512836
+  mean_optimal_gap_pct: 92.2393
+  median_optimal_gap_pct: 94.994
+  mean_tuning_time_s: 0.761391
+  median_tuning_time_s: 0.655736
+  mean_xgb_inference_time_s: 0.278034
+  median_xgb_inference_time_s: 0.222915
+  mean_non_inference_overhead_s: 0.483358
+  median_non_inference_overhead_s: 0.433088
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 8
+  near_optimal_10pct_success_rate_pct: 8
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 64, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (32, 16, 768, 512) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.921136
+  baseline_ms: 5.43352
+  mean_actual_latency_ms: 1.38743
+  median_actual_latency_ms: 1.35701
+  mean_speedup_vs_baseline: 4.25359
+  median_speedup_vs_baseline: 4.00404
+  mean_speedup_vs_best_seen: 0.721104
+  median_speedup_vs_best_seen: 0.678798
+  mean_optimal_gap_pct: 50.6219
+  median_optimal_gap_pct: 47.3192
+  mean_tuning_time_s: 0.870969
+  median_tuning_time_s: 0.74934
+  mean_xgb_inference_time_s: 0.306764
+  median_xgb_inference_time_s: 0.247661
+  mean_non_inference_overhead_s: 0.564205
+  median_non_inference_overhead_s: 0.501904
+  near_optimal_1pct_success_rate_pct: 20
+  near_optimal_5pct_success_rate_pct: 32
+  near_optimal_10pct_success_rate_pct: 32
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 64, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (32, 16, 768, 512) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.921136
+  baseline_ms: 5.43352
+  mean_actual_latency_ms: 1.21376
+  median_actual_latency_ms: 1.04858
+  mean_speedup_vs_baseline: 4.8643
+  median_speedup_vs_baseline: 5.18179
+  mean_speedup_vs_best_seen: 0.824636
+  median_speedup_vs_best_seen: 0.87846
+  mean_optimal_gap_pct: 31.7683
+  median_optimal_gap_pct: 13.8355
+  mean_tuning_time_s: 0.880414
+  median_tuning_time_s: 0.821011
+  mean_xgb_inference_time_s: 0.292156
+  median_xgb_inference_time_s: 0.265432
+  mean_non_inference_overhead_s: 0.588258
+  median_non_inference_overhead_s: 0.553703
+  near_optimal_1pct_success_rate_pct: 36
+  near_optimal_5pct_success_rate_pct: 48
+  near_optimal_10pct_success_rate_pct: 48
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 64, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (32, 16, 768, 512) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 0.921136
+  baseline_ms: 5.43352
+  mean_actual_latency_ms: 1.07427
+  median_actual_latency_ms: 0.915376
+  mean_speedup_vs_baseline: 5.36321
+  median_speedup_vs_baseline: 5.93583
+  mean_speedup_vs_best_seen: 0.909217
+  median_speedup_vs_best_seen: 1.00629
+  mean_optimal_gap_pct: 16.6248
+  median_optimal_gap_pct: -0.625315
+  mean_tuning_time_s: 1.12989
+  median_tuning_time_s: 0.994043
+  mean_xgb_inference_time_s: 0.342088
+  median_xgb_inference_time_s: 0.283916
+  mean_non_inference_overhead_s: 0.787804
+  median_non_inference_overhead_s: 0.708632
+  near_optimal_1pct_success_rate_pct: 64
+  near_optimal_5pct_success_rate_pct: 76
+  near_optimal_10pct_success_rate_pct: 76
+  best_seen_config_json: {"TILE_M": 16, "TILE_N": 64, "TILE_K": 16, "THREAD_X": 64, "THREAD_Y": 2, "UNROLL_FACTOR": 1, "THREAD_Z": 1}
+
+Workload (128, 3072, 768, 32) | 10 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 28.9104
+  baseline_ms: 41.3922
+  mean_actual_latency_ms: 37.5672
+  median_actual_latency_ms: 37.163
+  mean_speedup_vs_baseline: 1.12165
+  median_speedup_vs_baseline: 1.1138
+  mean_speedup_vs_best_seen: 0.783418
+  median_speedup_vs_best_seen: 0.777935
+  mean_optimal_gap_pct: 29.9436
+  median_optimal_gap_pct: 28.5454
+  mean_tuning_time_s: 0.754907
+  median_tuning_time_s: 0.660924
+  mean_xgb_inference_time_s: 0.273714
+  median_xgb_inference_time_s: 0.227238
+  mean_non_inference_overhead_s: 0.481193
+  median_non_inference_overhead_s: 0.436389
+  near_optimal_1pct_success_rate_pct: 4
+  near_optimal_5pct_success_rate_pct: 12
+  near_optimal_10pct_success_rate_pct: 16
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 32, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 4, "UNROLL_FACTOR": 32, "THREAD_Z": 1}
+
+Workload (128, 3072, 768, 32) | 30 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 28.9104
+  baseline_ms: 41.3922
+  mean_actual_latency_ms: 36.7302
+  median_actual_latency_ms: 36.549
+  mean_speedup_vs_baseline: 1.12769
+  median_speedup_vs_baseline: 1.13251
+  mean_speedup_vs_best_seen: 0.787637
+  median_speedup_vs_best_seen: 0.791004
+  mean_optimal_gap_pct: 27.0482
+  median_optimal_gap_pct: 26.4216
+  mean_tuning_time_s: 0.86534
+  median_tuning_time_s: 0.739541
+  mean_xgb_inference_time_s: 0.305879
+  median_xgb_inference_time_s: 0.248759
+  mean_non_inference_overhead_s: 0.55946
+  median_non_inference_overhead_s: 0.490795
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 32, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 4, "UNROLL_FACTOR": 32, "THREAD_Z": 1}
+
+Workload (128, 3072, 768, 32) | 50 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 28.9104
+  baseline_ms: 41.3922
+  mean_actual_latency_ms: 36.8318
+  median_actual_latency_ms: 36.549
+  mean_speedup_vs_baseline: 1.12391
+  median_speedup_vs_baseline: 1.13251
+  mean_speedup_vs_best_seen: 0.784997
+  median_speedup_vs_best_seen: 0.791004
+  mean_optimal_gap_pct: 27.3998
+  median_optimal_gap_pct: 26.4216
+  mean_tuning_time_s: 0.86915
+  median_tuning_time_s: 0.796443
+  mean_xgb_inference_time_s: 0.288612
+  median_xgb_inference_time_s: 0.26043
+  mean_non_inference_overhead_s: 0.580538
+  median_non_inference_overhead_s: 0.539303
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 32, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 4, "UNROLL_FACTOR": 32, "THREAD_Z": 1}
+
+Workload (128, 3072, 768, 32) | 100 particles
+  total_runs: 25
+  valid_final_count: 25
+  invalid_final_count: 0
+  invalid_final_rate_pct: 0
+  benchmark_error_count: 0
+  pso_error_count: 0
+  best_seen_latency_ms: 28.9104
+  baseline_ms: 41.3922
+  mean_actual_latency_ms: 36.6057
+  median_actual_latency_ms: 36.549
+  mean_speedup_vs_baseline: 1.13079
+  median_speedup_vs_baseline: 1.13251
+  mean_speedup_vs_best_seen: 0.789801
+  median_speedup_vs_best_seen: 0.791004
+  mean_optimal_gap_pct: 26.6177
+  median_optimal_gap_pct: 26.4216
+  mean_tuning_time_s: 1.12194
+  median_tuning_time_s: 0.986215
+  mean_xgb_inference_time_s: 0.338235
+  median_xgb_inference_time_s: 0.287662
+  mean_non_inference_overhead_s: 0.783701
+  median_non_inference_overhead_s: 0.704007
+  near_optimal_1pct_success_rate_pct: 0
+  near_optimal_5pct_success_rate_pct: 0
+  near_optimal_10pct_success_rate_pct: 0
+  best_seen_config_json: {"TILE_M": 96, "TILE_N": 32, "TILE_K": 16, "THREAD_X": 32, "THREAD_Y": 4, "UNROLL_FACTOR": 32, "THREAD_Z": 1}
+
+Per-run metrics and selected configurations: pso_bmm_run_details.csv

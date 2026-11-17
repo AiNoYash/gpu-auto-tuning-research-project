@@ -1,0 +1,76 @@
+{
+  "features": [
+    "is_gemm",
+    "is_bmm",
+    "is_gemv",
+    "BATCH_SIZE",
+    "M",
+    "N",
+    "K",
+    "TILE_M",
+    "TILE_N",
+    "TILE_K",
+    "THREAD_X",
+    "THREAD_Y",
+    "THREAD_Z",
+    "BLOCK_DIM_X",
+    "ROWS_PER_BLOCK",
+    "UNROLL_FACTOR",
+    "TOTAL_THREADS",
+    "GRID_SIZE",
+    "SHMEM_BYTES",
+    "WORK_PER_THREAD_M",
+    "WORK_PER_THREAD_N",
+    "WORK_PER_THREAD_K",
+    "TILE_K_ALIGNED",
+    "UNROLL_ALIGNMENT",
+    "BOUNDARY_ALIGNMENT_M",
+    "BOUNDARY_ALIGNMENT_N",
+    "BOUNDARY_ALIGNMENT_K"
+  ],
+  "sources": {
+    "gemm": {
+      "dataset": "D:\\Libraries\\rm\\datasets\\t4\\gemm\\gemm_dataset.csv",
+      "split": "D:\\Libraries\\rm\\models\\hyperparameter-tuning\\gemm_group_cv_splits.npz",
+      "dataset_sha256": "8392430dc660a8ea377775c93340f3b8e36ec9ca204a1adf10bf091250bea6b6",
+      "split_sha256": "a953c347ee38d7c02e4f3d51488fdbe0f1bde3bf0e6e2979884043cf419ffae0",
+      "rows": 7500,
+      "development_rows": 5988,
+      "holdout_rows": 1512
+    },
+    "bmm": {
+      "dataset": "D:\\Libraries\\rm\\datasets\\t4\\bmm\\bmm_dataset.csv",
+      "split": "D:\\Libraries\\rm\\models\\hyperparameter-tuning\\bmm_group_cv_splits.npz",
+      "dataset_sha256": "f4ade65d64612e0cba4060bcd4e2c98d934eda15eee82f345ce18a86988283e2",
+      "split_sha256": "57288b32a5afcdcd001c174ad74636e37148e1a26e9941c1d5d05f0d54e0c810",
+      "rows": 7500,
+      "development_rows": 6004,
+      "holdout_rows": 1496
+    },
+    "gemv": {
+      "dataset": "D:\\Libraries\\rm\\datasets\\t4\\gemv\\gemv_dataset.csv",
+      "split": "D:\\Libraries\\rm\\models\\hyperparameter-tuning\\gemv_group_cv_splits.npz",
+      "dataset_sha256": "cf491c4e4a1f4fd3cdfb57b92ef3645471ccc48ed7deca689f7ab709b93588ae",
+      "split_sha256": "807c638cae3159ba8c710e9006da914b373d02da01290ae9a51d177661c25316",
+      "rows": 7431,
+      "development_rows": 5949,
+      "holdout_rows": 1482
+    }
+  },
+  "seed": 42,
+  "max_boost_rounds": 1000,
+  "early_stopping_rounds": 75,
+  "final_estimator_multiplier": 1.1,
+  "preprocessing_function": "preprocess in D:\\Libraries\\rm\\models\\hyperparameter-tuning\\xgb_logexe_optuna_combined.py",
+  "script_sha256": "0fdd8243131950fe22c68fa7533f569f0a1bb88428409daa01a33b4d2f1c761c",
+  "missing": "NaN for inapplicable parameters and derived features",
+  "defaults": {
+    "non_bmm_batch_size": 1,
+    "gemv_N": 1
+  },
+  "shared_memory_element_bytes": 4,
+  "invalid_latency": 100000000.0,
+  "target": "natural log latency_ms after invalid penalty substitution",
+  "objective": "mean of five pooled validation log RMSE values including invalid penalties",
+  "selection_metrics": "Per-kernel validation workloads; measured candidates only; ties use source row order. Invalid selections fail near-optimal rates. Regret and speedup means cover valid selections only."
+}
