@@ -1,5 +1,6 @@
 """Train the combined LogExe model using the completed tuning run's artifacts."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,6 +12,14 @@ TUNER_PATH = MODEL_DIR / "hyperparameter-tuning" / "xgb_logexe_optuna_combined.p
 TUNING_DIR = TUNER_PATH.parent / "combined_logexe"
 MODEL_PATH = MODEL_DIR / "xgb_logexe_model_combined.json"
 REPORT_PATH = MODEL_DIR / "xgb_logexe_combined_holdout_metrics.json"
+
+
+def dataset_hash_matches(path, expected):
+    """Accept original hashes across LF/CRLF conversion without changing data."""
+    raw = Path(path).read_bytes()
+    lf = raw.replace(b"\r\n", b"\n")
+    variants = (raw, lf, lf.replace(b"\n", b"\r\n"))
+    return any(hashlib.sha256(data).hexdigest() == expected for data in variants)
 
 
 def load_tuner():
@@ -30,7 +39,11 @@ def load_training_inputs():
         raise ValueError("Feature order differs from the completed tuning run.")
     for kernel in tuning.KERNELS:
         for key in ("dataset_sha256", "split_sha256"):
-            if sources[kernel][key] != manifest["sources"][kernel][key]:
+            expected = manifest["sources"][kernel][key]
+            matches = sources[kernel][key] == expected
+            if key == "dataset_sha256" and not matches:
+                matches = dataset_hash_matches(tuning.DATASETS[kernel], expected)
+            if not matches:
                 raise ValueError(f"{kernel}: {key} differs from the tuning run.")
     # Paths can change when moving the project between a laptop and Colab.
     for label, data in (("development", dev), ("holdout", holdout)):
