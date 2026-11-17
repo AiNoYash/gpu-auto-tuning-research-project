@@ -29,15 +29,16 @@ def load_tuner():
     return module
 
 
-def load_training_inputs():
+def load_training_inputs(kernels=None):
     """Reuse tuning preprocessing and verify the saved dataset/split identity."""
     tuning = load_tuner()
     manifest = json.loads((TUNING_DIR / "manifest.json").read_text())
     params = json.loads((TUNING_DIR / "best_params.json").read_text())
-    dev, holdout, _, sources = tuning.load_data()
+    selected = tuning.KERNELS if kernels is None else tuple(kernels)
+    dev, holdout, _, sources = tuning.load_data(selected)
     if manifest["features"] != tuning.FEATURES:
         raise ValueError("Feature order differs from the completed tuning run.")
-    for kernel in tuning.KERNELS:
+    for kernel in selected:
         for key in ("dataset_sha256", "split_sha256"):
             expected = manifest["sources"][kernel][key]
             matches = sources[kernel][key] == expected
@@ -48,6 +49,10 @@ def load_training_inputs():
     # Paths can change when moving the project between a laptop and Colab.
     for label, data in (("development", dev), ("holdout", holdout)):
         saved = pd.read_csv(TUNING_DIR / f"{label}_row_mapping.csv")
+        saved = pd.concat(
+            [saved.loc[saved["kernel"] == kernel] for kernel in selected],
+            ignore_index=True,
+        )
         actual = data[["kernel", "source_row"]].reset_index(drop=True)
         if not actual.equals(saved):
             raise ValueError(f"{label} row membership/order differs from tuning.")
