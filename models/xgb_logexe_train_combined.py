@@ -1,5 +1,6 @@
 """Train the combined LogExe model using the completed tuning run's artifacts."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 
@@ -13,6 +14,14 @@ MODEL_PATH = MODEL_DIR / "xgb_logexe_model_combined.json"
 REPORT_PATH = MODEL_DIR / "xgb_logexe_combined_holdout_metrics.json"
 
 
+def dataset_hash_matches(path, expected):
+    """Accept original hashes across LF/CRLF conversion without changing data."""
+    raw = Path(path).read_bytes()
+    lf = raw.replace(b"\r\n", b"\n")
+    variants = (raw, lf, lf.replace(b"\n", b"\r\n"))
+    return any(hashlib.sha256(data).hexdigest() == expected for data in variants)
+
+
 def load_tuner():
     spec = importlib.util.spec_from_file_location("combined_logexe_tuning", TUNER_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -20,21 +29,30 @@ def load_tuner():
     return module
 
 
-def load_training_inputs():
+def load_training_inputs(kernels=None):
     """Reuse tuning preprocessing and verify the saved dataset/split identity."""
     tuning = load_tuner()
     manifest = json.loads((TUNING_DIR / "manifest.json").read_text())
     params = json.loads((TUNING_DIR / "best_params.json").read_text())
-    dev, holdout, _, sources = tuning.load_data()
+    selected = tuning.KERNELS if kernels is None else tuple(kernels)
+    dev, holdout, _, sources = tuning.load_data(selected)
     if manifest["features"] != tuning.FEATURES:
         raise ValueError("Feature order differs from the completed tuning run.")
-    for kernel in tuning.KERNELS:
+    for kernel in selected:
         for key in ("dataset_sha256", "split_sha256"):
-            if sources[kernel][key] != manifest["sources"][kernel][key]:
+            expected = manifest["sources"][kernel][key]
+            matches = sources[kernel][key] == expected
+            if key == "dataset_sha256" and not matches:
+                matches = dataset_hash_matches(tuning.DATASETS[kernel], expected)
+            if not matches:
                 raise ValueError(f"{kernel}: {key} differs from the tuning run.")
     # Paths can change when moving the project between a laptop and Colab.
     for label, data in (("development", dev), ("holdout", holdout)):
         saved = pd.read_csv(TUNING_DIR / f"{label}_row_mapping.csv")
+        saved = pd.concat(
+            [saved.loc[saved["kernel"] == kernel] for kernel in selected],
+            ignore_index=True,
+        )
         actual = data[["kernel", "source_row"]].reset_index(drop=True)
         if not actual.equals(saved):
             raise ValueError(f"{label} row membership/order differs from tuning.")

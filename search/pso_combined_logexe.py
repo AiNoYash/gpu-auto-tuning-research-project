@@ -85,14 +85,21 @@ def write_outputs(details, summaries, output, settings, cache_count):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, default=ROOT / "models/xgb_logexe_model_combined.json")
-    parser.add_argument("--kernels", nargs="+", choices=["gemm", "bmm", "gemv"],
-                        default=["gemm", "bmm", "gemv"])
-    parser.add_argument("--out", type=Path, default=ROOT / "search/pso_evaluations/combined")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--kernel", choices=["gemm", "bmm", "gemv"],
+                           help="Run one kernel independently.")
+    selection.add_argument("--kernels", nargs="+", choices=["gemm", "bmm", "gemv"],
+                           help="Run a selected list of kernels (default: all three).")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="Output folder; defaults to a folder for the selected kernels.")
     args = parser.parse_args()
+    args.kernels = [args.kernel] if args.kernel else (args.kernels or ["gemm", "bmm", "gemv"])
     if len(set(args.kernels)) != len(args.kernels):
         parser.error("--kernels must not contain duplicates")
+    if args.out is None:
+        args.out = ROOT / "search/pso_evaluations/combined" / "_".join(args.kernels)
     training = load_module(ROOT / "models/xgb_logexe_train_combined.py", "combined_training")
-    tuning, manifest, _, dev, holdout = training.load_training_inputs()
+    tuning, manifest, _, dev, holdout = training.load_training_inputs(args.kernels)
     features = manifest["features"]
     model = xgb.XGBRegressor()
     model.load_model(str(args.model))

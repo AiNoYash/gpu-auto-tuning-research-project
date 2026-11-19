@@ -86,10 +86,10 @@ def preprocess(raw, kernel):
     return df
 
 
-def load_data():
+def load_data(kernels=None):
     development, holdout, fold_parts, provenance = [], [], [[] for _ in range(N_SPLITS)], {}
     offset = 0
-    for kernel in KERNELS:
+    for kernel in (KERNELS if kernels is None else kernels):
         raw = pd.read_csv(DATASETS[kernel])
         df = preprocess(raw, kernel)
         with np.load(SPLITS[kernel]) as saved:
