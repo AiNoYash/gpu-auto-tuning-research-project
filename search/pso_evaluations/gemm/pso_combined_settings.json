@@ -1,0 +1,117 @@
+{
+  "model": "/content/gpu-auto-tuning-research-project/models/xgb_logexe_model_combined.json",
+  "features": [
+    "is_gemm",
+    "is_bmm",
+    "is_gemv",
+    "BATCH_SIZE",
+    "M",
+    "N",
+    "K",
+    "TILE_M",
+    "TILE_N",
+    "TILE_K",
+    "THREAD_X",
+    "THREAD_Y",
+    "THREAD_Z",
+    "BLOCK_DIM_X",
+    "ROWS_PER_BLOCK",
+    "UNROLL_FACTOR",
+    "TOTAL_THREADS",
+    "GRID_SIZE",
+    "SHMEM_BYTES",
+    "WORK_PER_THREAD_M",
+    "WORK_PER_THREAD_N",
+    "WORK_PER_THREAD_K",
+    "TILE_K_ALIGNED",
+    "UNROLL_ALIGNMENT",
+    "BOUNDARY_ALIGNMENT_M",
+    "BOUNDARY_ALIGNMENT_N",
+    "BOUNDARY_ALIGNMENT_K"
+  ],
+  "kernels": [
+    "gemm"
+  ],
+  "particles": [
+    10,
+    30,
+    50,
+    100
+  ],
+  "runs": 25,
+  "iterations": 50,
+  "search": {
+    "gemm": {
+      "space": {
+        "TILE_M": [
+          4,
+          8,
+          16,
+          32,
+          64,
+          96,
+          128,
+          192,
+          256
+        ],
+        "TILE_N": [
+          4,
+          8,
+          16,
+          32,
+          64,
+          96,
+          128,
+          192,
+          256
+        ],
+        "TILE_K": [
+          2,
+          4,
+          8,
+          16,
+          32,
+          64
+        ],
+        "THREAD_X": [
+          2,
+          4,
+          8,
+          16,
+          32,
+          64,
+          128,
+          256,
+          512
+        ],
+        "THREAD_Y": [
+          2,
+          4,
+          8,
+          16,
+          32,
+          64,
+          128,
+          256,
+          512
+        ],
+        "UNROLL_FACTOR": [
+          1,
+          2,
+          4,
+          8,
+          16,
+          32,
+          64
+        ]
+      },
+      "seed": 42,
+      "c1": 1.49618,
+      "c2": 1.49618,
+      "w": 0.7298,
+      "k": 3,
+      "p": 2,
+      "cuda_arch": "sm_75"
+    }
+  }
+}
